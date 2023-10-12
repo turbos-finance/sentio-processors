@@ -5,6 +5,15 @@ import { SuiNetwork } from "@sentio/sdk/sui"
 import * as helper from './helper/turbos-clmm-helper.js'
 import { Gauge, BigDecimal } from "@sentio/sdk";
 
+export const volRewardOptions = {
+  sparse: true,
+  aggregationConfig: {
+      intervalInMinutes: [60],
+      // discardOrigin: false
+  }
+}
+const day_reward_amount = Gauge.register("day_reward_amount", volRewardOptions)
+
 export const volOptions = {
   sparse: true,
 }
@@ -210,9 +219,10 @@ pool.bind({
     const sender = event.sender;
 
     const { type, symbol, decimals } = await helper.getPoolRewardCoinType(ctx, reward_vault);
-    const dayAmount = new BigDecimal(86400).multipliedBy(reward_emissions_per_second.toString()).dividedBy(10 ** decimals).toString();
-
-    ctx.meter.Gauge("day_reward_amount").record(dayAmount, { pairName, pairFullName, type, symbol });
+    const dayAmount = new BigDecimal(86400).multipliedBy(reward_emissions_per_second.toString()).dividedBy(10 ** decimals).toNumber();
+    console.log(`onEventUpdateRewardEmissionsEvent decimals:${decimals}, reward_emissions_per_second:${reward_emissions_per_second.toString()}, day amount:${dayAmount}`)
+    // ctx.meter.Gauge("day_reward_amount").record(dayAmount, { pairName, pairFullName, type, symbol });
+    day_reward_amount.record(ctx, dayAmount, { pairName, pairFullName, type, symbol });
 
     ctx.eventLogger.emit("UpdateRewardEmissions", {
       distinctId: sender,
