@@ -3,7 +3,7 @@ import { SuiObjectProcessor, SuiContext, SuiObjectContext, SuiObjectProcessorTem
 import * as constant from './constant-turbos.js'
 import { SuiNetwork } from "@sentio/sdk/sui"
 import * as helper from './helper/turbos-clmm-helper.js'
-import { Gauge } from "@sentio/sdk";
+import { Gauge, BigDecimal } from "@sentio/sdk";
 
 export const volOptions = {
   sparse: true,
@@ -195,6 +195,41 @@ pool.bind({
     ctx.meter.Gauge("remove_liquidity_gauge").record(value, { pairName, pairFullName })
 
   })
+  .onEventUpdateRewardEmissionsEvent(async (event, ctx) => {
+    ctx.meter.Counter("update_reward_emissions").add(1);
+    const pool = event.data_decoded.pool
+    const poolInfo = await helper.getOrCreatePool(ctx, pool)
+
+    const pairName = poolInfo.pairName
+    const pairFullName = poolInfo.pairFullName
+
+    const reward_emissions_per_second = event.data_decoded.reward_emissions_per_second;
+    const reward_index = event.data_decoded.reward_index;
+    const reward_manager = event.data_decoded.reward_manager;
+    const reward_vault = event.data_decoded.reward_vault;
+    const sender = event.sender;
+
+    const { type, symbol, decimals } = await helper.getPoolRewardCoinType(ctx, reward_vault);
+    const dayAmount = new BigDecimal(86400).multipliedBy(reward_emissions_per_second.toString()).dividedBy(10 ** decimals).toString();
+
+    ctx.meter.Gauge("day_reward_amount").record(dayAmount, { pairName, pairFullName, type, symbol });
+
+    ctx.eventLogger.emit("UpdateRewardEmissions", {
+      distinctId: sender,
+      pool,
+      pairName,
+      pairFullName,
+      reward_emissions_per_second,
+      reward_index,
+      reward_manager,
+      reward_vault,
+      reward_coin_type: type,
+      reward_coin_symbol: symbol,
+      reward_coin_decimals: decimals,
+      reward_coin_day_amount: dayAmount,
+      message: `Update Reward Emissions in ${pairFullName}`
+    })
+  });
 
 
 

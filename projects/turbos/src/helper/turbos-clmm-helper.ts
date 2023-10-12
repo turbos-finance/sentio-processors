@@ -244,3 +244,25 @@ export async function calculateSwapVol_USD(type: string, amount_a: number, amoun
 
 }
 
+export async function getPoolRewardCoinType(ctx: SuiContext | SuiObjectContext, objectId: string) {
+    const rewardCoin = {
+        type: '',
+        symbol: '',
+        decimals: 9
+    }
+    try {
+        const obj = await ctx.client.getObject({ id: objectId, options: { showType: true, showContent: true } });
+        const type = obj.data.content.type;
+        const typeArray = type.match(/\<([^)]*)\>/);
+        const coinType = typeArray[1];
+        const coin = await ctx.client.getCoinMetadata({ coinType });
+
+        rewardCoin.type = coinType;
+        rewardCoin.symbol = coin.symbol;
+        rewardCoin.decimals = coin.decimals;
+    }
+    catch (e) {
+        console.log(`get pool reward coin type error ${e.message} at ${JSON.stringify(ctx)}`)
+    }
+    return rewardCoin;
+}
