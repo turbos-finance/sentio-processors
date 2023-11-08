@@ -1,15 +1,18 @@
-import { pool, pool_factory } from "./types/sui/turbos.js";
 import { SuiObjectProcessor, SuiContext, SuiObjectContext, SuiObjectProcessorTemplate } from "@sentio/sdk/sui"
 import * as constant from './constant-turbos.js'
 import { SuiNetwork } from "@sentio/sdk/sui"
 import * as helper from './helper/turbos-clmm-helper.js'
 import { Gauge, BigDecimal } from "@sentio/sdk";
 
+import { pool, pool_factory } from "./types/sui/turbos.js";
+const address = constant.CLMM_MAINNET;
+const network = SuiNetwork.MAIN_NET;
+
 export const volRewardOptions = {
   sparse: true,
   aggregationConfig: {
-      intervalInMinutes: [60],
-      // discardOrigin: false
+    intervalInMinutes: [60],
+    // discardOrigin: false
   }
 }
 const day_reward_amount = Gauge.register("day_reward_amount", volRewardOptions)
@@ -23,8 +26,8 @@ const price_b_gauge = Gauge.register("price_b", volOptions)
 
 
 pool_factory.bind({
-  address: constant.CLMM_MAINNET,
-  network: SuiNetwork.MAIN_NET,
+  address,
+  network,
   startCheckpoint: 1500000n
 })
   .onEventPoolCreatedEvent(async (event, ctx) => {
@@ -55,8 +58,8 @@ pool_factory.bind({
 
 
 pool.bind({
-  address: constant.CLMM_MAINNET,
-  network: SuiNetwork.MAIN_NET,
+  address,
+  network,
   startCheckpoint: 1500000n
 })
   .onEventSwapEvent(async (event, ctx) => {
@@ -74,6 +77,8 @@ pool.bind({
     const fee_amount = Number(event.data_decoded.fee_amount)
     const is_exact_in = event.data_decoded.is_exact_in
 
+    const type_a = poolInfo.type_a
+    const type_b = poolInfo.type_b
     const symbol_a = poolInfo.symbol_a
     const symbol_b = poolInfo.symbol_b
     const decimal_a = poolInfo.decimal_a
@@ -101,6 +106,8 @@ pool.bind({
       recipient,
       pool,
       sqrt_price,
+      type_a,
+      type_b,
       amount_a,
       amount_b,
       price_a,
@@ -131,6 +138,7 @@ pool.bind({
       price_b_gauge.record(ctx, price_b, { pairName, pairFullName, symbol_b })
     }
 
+    await helper.calculateTokenValue_USD(ctx, pool, ctx.timestamp)
   })
   .onEventMintEvent(async (event, ctx) => {
     ctx.meter.Counter("add_liquidity_counter").add(1)
@@ -167,6 +175,7 @@ pool.bind({
     })
     ctx.meter.Gauge("add_liquidity_gauge").record(value, { pairName, pairFullName })
 
+    await helper.calculateTokenValue_USD(ctx, pool, ctx.timestamp)
   })
   .onEventBurnEvent(async (event, ctx) => {
     ctx.meter.Counter("remove_liquidity_counter").add(1)
@@ -202,6 +211,8 @@ pool.bind({
       message: `Remove USD$${value} Liquidity in ${pairFullName}`
     })
     ctx.meter.Gauge("remove_liquidity_gauge").record(value, { pairName, pairFullName })
+
+    await helper.calculateTokenValue_USD(ctx, pool, ctx.timestamp)
 
   })
   .onEventUpdateRewardEmissionsEvent(async (event, ctx) => {
@@ -255,6 +266,7 @@ const template = new SuiObjectProcessorTemplate()
   .onTimeInterval(async (self, _, ctx) => {
     if (self) {
       try {
+        const fields = await ctx.coder.decodedType(self, pool.Pool.type())
         //get coin addresses
         const poolInfo = await helper.getOrCreatePool(ctx, ctx.objectId)
         const symbol_a = poolInfo.symbol_a
@@ -270,8 +282,8 @@ const template = new SuiObjectProcessorTemplate()
 
 
 
-        const coin_a_balance = Number(self.fields.coin_a) / Math.pow(10, decimal_a)
-        const coin_b_balance = Number(self.fields.coin_b) / Math.pow(10, decimal_b)
+        const coin_a_balance = Number(fields?.coin_a || 0) / Math.pow(10, decimal_a)
+        const coin_b_balance = Number(fields?.coin_b || 0) / Math.pow(10, decimal_b)
         console.log(`pair: ${pairFullName} \nsymbol:${symbol_a} ${symbol_b}, \ncoin_a_balance ${coin_a_balance} coin_b_balance ${coin_b_balance}, \npool ${ctx.objectId}`)
         if (coin_a_balance) {
           ctx.meter.Gauge('coin_a_balance').record(coin_a_balance, { coin_symbol: symbol_a, pairName, pairFullName })
@@ -282,7 +294,7 @@ const template = new SuiObjectProcessorTemplate()
         }
 
         //record liquidity
-        const liquidity = Number(self.fields.liquidity)
+        const liquidity = Number(fields?.liquidity || 0)
         ctx.meter.Gauge("liquidity").record(liquidity, { pairName, pairFullName })
 
         //record price
@@ -291,6 +303,7 @@ const template = new SuiObjectProcessorTemplate()
         //record tvl
         const [tvl_a, tvl_b] = await helper.calculateValue_USD(ctx, ctx.objectId, coin_a_balance, coin_b_balance, ctx.timestamp)
         const tvl = tvl_a + tvl_b
+        console.log(`${pairFullName} tvl: ${tvl}`);
         ctx.meter.Gauge("tvl").record(tvl, { pairName, pairFullName })
         ctx.meter.Gauge("tvl_oneside").record(tvl_a, { pairName, pairFullName, bridge: coin_a_bridge, coin: coin_a_address })
         ctx.meter.Gauge("tvl_oneside").record(tvl_b, { pairName, pairFullName, bridge: coin_b_bridge, coin: coin_b_address })
@@ -304,5 +317,5 @@ const template = new SuiObjectProcessorTemplate()
       }
     }
 
-  }, 60, 10, undefined, { owned: false })
+  }, 60, 1440, undefined, { owned: false })
 // }

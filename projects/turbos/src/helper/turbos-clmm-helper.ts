@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { SuiObjectProcessor, SuiContext, SuiObjectContext } from "@sentio/sdk/sui"
 import { getPriceByType, token } from "@sentio/sdk/utils"
 import * as constant from '../constant-turbos.js'
@@ -61,6 +62,10 @@ export function getCoinFullAddress(type: string) {
 }
 
 interface poolInfo {
+    name_a: string,
+    name_b: string,
+    type_a: string,
+    type_b: string,
     symbol_a: string,
     symbol_b: string,
     decimal_a: number,
@@ -78,9 +83,9 @@ export async function buildCoinInfo(ctx: SuiContext | SuiObjectContext, coinAddr
     let [symbol, decimal, name] = ["unk", 100, "unk"]
     try {
         const metadata = await ctx.client.getCoinMetadata({ coinType: coinAddress })
-        symbol = metadata.symbol
-        decimal = metadata.decimals
-        name = metadata.name
+        symbol = metadata!.symbol
+        decimal = metadata!.decimals
+        name = metadata!.name
         console.log(`build coin metadata ${symbol} ${decimal} ${name}`)
 
     }
@@ -110,12 +115,28 @@ export async function buildPoolInfo(ctx: SuiContext | SuiObjectContext, pool: st
     //     console.log(`Pool not in array ${pool}`)
     // }
 
-    let [symbol_a, symbol_b, decimal_a, decimal_b, pairName, pairFullName, type, fee_label] = ["", "", 0, 0, "", "", "", "", "NaN"]
+    let [
+        name_a,
+        name_b,
+        type_a,
+        type_b,
+        symbol_a,
+        symbol_b,
+        decimal_a,
+        decimal_b,
+        pairName,
+        pairFullName,
+        type,
+        fee_label
+    ] = ["", "", "", "", 0, 0, "", "", "", "", "NaN"]
     try {
+        // @ts-ignore
         const obj = await ctx.client.getObject({ id: pool, options: { showType: true, showContent: true } })
-        type = obj.data.type
-        if (obj.data.content.fields.fee) {
-            fee_label = (Number(obj.data.content.fields.fee) / 10000).toFixed(2) + "%"
+        // @ts-ignore
+        type = obj!.data.type
+        // @ts-ignore
+        if (obj!.data.content.fields.fee) {
+            fee_label = (Number(obj!.data.content.fields.fee) / 10000).toFixed(2) + "%"
         }
         let [coin_a_full_address, coin_b_full_address] = ["", ""]
         if (type) {
@@ -123,10 +144,14 @@ export async function buildPoolInfo(ctx: SuiContext | SuiObjectContext, pool: st
         }
         const coinInfo_a = await getOrCreateCoin(ctx, coin_a_full_address)
         const coinInfo_b = await getOrCreateCoin(ctx, coin_b_full_address)
+        type_a = coin_a_full_address
+        type_b = coin_b_full_address
         symbol_a = coinInfo_a.symbol
         symbol_b = coinInfo_b.symbol
         decimal_a = coinInfo_a.decimal
         decimal_b = coinInfo_b.decimal
+        name_a = coinInfo_a.name
+        name_b = coinInfo_b.name
         pairName = symbol_a + "-" + symbol_b + " " + fee_label
         pairFullName = coinInfo_a.name + "-" + coinInfo_b.name + " " + fee_label
     }
@@ -135,6 +160,10 @@ export async function buildPoolInfo(ctx: SuiContext | SuiObjectContext, pool: st
     }
 
     return {
+        name_a,
+        name_b,
+        type_a,
+        type_b,
         symbol_a,
         symbol_b,
         decimal_a,
@@ -158,8 +187,9 @@ export const getOrCreatePool = async function (ctx: SuiContext | SuiObjectContex
 export async function getPoolPrice(ctx: SuiContext | SuiObjectContext, pool: string) {
     let coin_a2b_price = 0
     try {
+        // @ts-ignore
         const obj = await ctx.client.getObject({ id: pool, options: { showType: true, showContent: true } })
-        const sqrt_price = Number(obj.data.content.fields.sqrt_price)
+        const sqrt_price = Number(obj!.data.content.fields.sqrt_price)
         if (!sqrt_price) { console.log(`get pool price error at ${ctx}`) }
         const poolInfo = await getOrCreatePool(ctx, pool)
         const pairName = poolInfo.pairName
@@ -251,18 +281,76 @@ export async function getPoolRewardCoinType(ctx: SuiContext | SuiObjectContext, 
         decimals: 9
     }
     try {
+        // @ts-ignore
         const obj = await ctx.client.getObject({ id: objectId, options: { showType: true, showContent: true } });
-        const type = obj.data.content.type;
+        const type = obj!.data.content.type;
         const typeArray = type.match(/\<([^)]*)\>/);
         const coinType = typeArray[1];
         const coin = await ctx.client.getCoinMetadata({ coinType });
 
         rewardCoin.type = coinType;
-        rewardCoin.symbol = coin.symbol;
-        rewardCoin.decimals = coin.decimals;
+        rewardCoin.symbol = coin!.symbol;
+        rewardCoin.decimals = coin!.decimals;
     }
     catch (e) {
         console.log(`get pool reward coin type error ${e.message} at ${JSON.stringify(ctx)}`)
     }
     return rewardCoin;
+}
+
+
+export async function calculateTokenValue_USD(
+    ctx: SuiContext | SuiObjectContext,
+    pool: string,
+    date: Date
+) {
+    let [value_a, value_b] = [0, 0]
+    try {
+        // @ts-ignore
+        const obj = await ctx.client.getObject({ id: pool, options: { showType: true, showContent: true } })
+        const coin_a = Number(obj!.data.content.fields.coin_a || 0)
+        const coin_b = Number(obj!.data.content.fields.coin_b || 0)
+
+        const poolInfo = await getOrCreatePool(ctx, pool)
+        const [coin_a_full_address, coin_b_full_address] = getCoinFullAddress(poolInfo.type)
+
+        const pairName = poolInfo.pairName
+        const pairFullName = poolInfo.pairFullName
+        const name_a = poolInfo.name_a
+        const name_b = poolInfo.name_b
+
+        const price_a = await getPriceByType(SuiNetwork.MAIN_NET, coin_a_full_address, date)
+        const price_b = await getPriceByType(SuiNetwork.MAIN_NET, coin_b_full_address, date)
+        const coin_a2b_price = await getPoolPrice(ctx, pool)
+
+        const amount_a = Number(coin_a) / 10 ** poolInfo.decimal_a;
+        const amount_b = Number(coin_b) / 10 ** poolInfo.decimal_b;
+
+        if (price_a) {
+            value_a = amount_a * price_a
+            //handle the case of low liquidity
+            if (price_b) {
+                value_b = amount_b * price_b
+            }
+            else {
+                value_b = amount_b / coin_a2b_price * price_a
+            }
+        }
+        else if (price_b) {
+            value_a = amount_a * coin_a2b_price * price_b
+            value_b = amount_b * price_b
+        }
+        else {
+            console.log(`price not in sui coinlist, calculate value failed at coin_a: ${coin_a_full_address},coin_b: ${coin_b_full_address} at ${JSON.stringify(ctx)}`)
+        }
+
+        ctx.meter.Gauge("token_usd_tvl").record(value_a, { pairName, pairFullName, name: name_a, symbol: poolInfo.symbol_a })
+        ctx.meter.Gauge("token_usd_tvl").record(value_b, { pairName, pairFullName, name: name_b, symbol: poolInfo.symbol_b })
+
+        ctx.meter.Gauge("token_balance_tvl").record(amount_a, { pairName, pairFullName, name: name_a, symbol: poolInfo.symbol_a })
+        ctx.meter.Gauge("token_balance_tvl").record(amount_b, { pairName, pairFullName, name: name_b, symbol: poolInfo.symbol_b })
+    }
+    catch (e) {
+        console.log(`calculate token liquidity usd error ${e.message} at ${pool}`)
+    }
 }

@@ -1,4 +1,5 @@
 export const CLMM_MAINNET = "0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1"
+export const CLMM_TESTNET = "0xfea145c1608cd5366ffcf278c0124d9f416b30e33a6a47ee12c615420ee0224c"
 
 
 // export const POOLS_INFO_MAINNET = [
