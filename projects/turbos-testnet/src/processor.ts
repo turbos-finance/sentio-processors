@@ -6,8 +6,8 @@ import { Gauge, BigDecimal } from "@sentio/sdk";
 
 import { pool, pool_factory } from "./types/sui/turbos.js";
 import { getCurrentTickStatus, MAX_TICK_INDEX, MIN_TICK_INDEX } from "./helper/turbos-clmm-helper.js";
-const address = constant.CLMM_MAINNET;
-const network = SuiNetwork.MAIN_NET;
+const address = constant.CLMM_TESTNET;
+const network = SuiNetwork.TEST_NET;
 
 export const volRewardOptions = {
   sparse: true,
@@ -29,7 +29,7 @@ const price_b_gauge = Gauge.register("price_b", volOptions)
 pool_factory.bind({
   address,
   network,
-  startCheckpoint: 1500000n
+  startCheckpoint: 7000000n
 })
   .onEventPoolCreatedEvent(async (event, ctx) => {
     ctx.meter.Counter("create_pool_counter").add(1)
@@ -61,7 +61,7 @@ pool_factory.bind({
 pool.bind({
   address,
   network,
-  startCheckpoint: 1500000n
+  startCheckpoint: 7000000n
 })
   .onEventSwapEvent(async (event, ctx) => {
     ctx.meter.Counter("swap_counter").add(1)
@@ -104,7 +104,7 @@ pool.bind({
     }
 
     ctx.meter.Gauge("Fee").record(fee_usd, { pairName, pairFullName });
-    ctx.meter.Counter("Cumulative_Fee_Counter").add(fee_usd!, { pairName, pairFullName });
+    ctx.meter.Counter("Cumulative_Fee").add(fee_usd!, { pairName, pairFullName });
 
     ctx.eventLogger.emit("SwapEvent", {
       distinctId: sender,
