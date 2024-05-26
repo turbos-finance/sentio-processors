@@ -120,7 +120,9 @@ pool
       const amount_b =
         Number(event.data_decoded.amount_b) / Math.pow(10, decimal_b);
 
-      console.log(`swapevent calculateSwapVol_USD pool:${pool} ;type:${poolInfo.type}`);
+      console.log(
+        `swapevent calculateSwapVol_USD pool:${pool} ;type:${poolInfo.type}`
+      );
       const [usd_volume, price_a, price_b] = await helper.calculateSwapVol_USD(
         poolInfo.type,
         amount_a,
@@ -142,7 +144,7 @@ pool
       ctx.meter.Gauge("Fee").record(fee_usd, { pairName, pairFullName });
       ctx.meter
         .Counter("Cumulative_Fee_Counter")
-        .add(fee_usd!, { pairName, pairFullName });
+        .add(fee_usd!, { pairName, pairFullName, poolId: pool });
 
       ctx.eventLogger.emit("SwapEvent", {
         distinctId: sender,
@@ -178,15 +180,16 @@ pool
 
       ctx.meter
         .Gauge("Swap_Volume_USD")
-        .record(usd_volume!, { pairName, pairFullName });
+        .record(usd_volume!, { pairName, pairFullName, poolId: pool });
       ctx.meter
         .Counter("Swap_Volume_USD_Counter")
-        .add(usd_volume!, { pairName, pairFullName });
+        .add(usd_volume!, { pairName, pairFullName, poolId: pool });
       if (price_a) {
         price_a_gauge.record(ctx, price_a, {
           pairName,
           pairFullName,
           symbol_a,
+          poolId: pool,
         });
       }
       if (price_b) {
@@ -194,6 +197,7 @@ pool
           pairName,
           pairFullName,
           symbol_b,
+          poolId: pool,
         });
       }
 
@@ -213,7 +217,7 @@ pool
 
       const mutated = ctx.transaction.effects?.mutated;
       const obj = mutated?.find((item) => item.reference.objectId === pool);
-      
+
       const poolInfo = await helper.getOrCreatePool(ctx, pool);
       const pairName = poolInfo.pairName;
       const pairFullName = poolInfo.pairFullName;
@@ -255,7 +259,7 @@ pool
       });
       ctx.meter
         .Gauge("add_liquidity_gauge")
-        .record(value, { pairName, pairFullName });
+        .record(value, { pairName, pairFullName, poolId: pool });
 
       await helper.calculateTokenValue_USD(
         ctx,
@@ -315,7 +319,7 @@ pool
       });
       ctx.meter
         .Gauge("remove_liquidity_gauge")
-        .record(value, { pairName, pairFullName });
+        .record(value, { pairName, pairFullName, poolId: pool });
 
       await helper.calculateTokenValue_USD(
         ctx,
@@ -358,6 +362,7 @@ pool
       pairFullName,
       type,
       symbol,
+      poolId: pool,
     });
 
     ctx.eventLogger.emit("UpdateRewardEmissions", {
@@ -429,7 +434,7 @@ position_manager
         amount_usd: value_a + value_b,
         type_b: poolInfo.type_b,
         recipientAddress,
-        message: `collect ${amount_a} ${poolInfo.symbol_a} and  ${amount_b} ${poolInfo.symbol_b} fee`,
+        message: `collect ${_amount_a} ${poolInfo.symbol_a} and  ${_amount_b} ${poolInfo.symbol_b} fee`,
       });
     },
     { resourceChanges: true }
@@ -466,7 +471,7 @@ position_manager
       vault,
       vault_symbol: vaultCoin.symbol,
       vault_coinType: vaultCoin.type,
-      message: `collect ${amount} ${vaultCoin.symbol} reward`,
+      message: `collect ${_amount} ${vaultCoin.symbol} reward`,
     });
   });
 
@@ -533,7 +538,7 @@ const template = new SuiObjectProcessorTemplate().onTimeInterval(
         const liquidity = Number(fields?.liquidity || 0);
         ctx.meter
           .Gauge("liquidity")
-          .record(liquidity, { pairName, pairFullName });
+          .record(liquidity, { pairName, pairFullName, poolId: ctx.objectId });
 
         //record price
         // const coin_a2b_price = await helper.getPoolPrice(ctx, ctx.objectId)

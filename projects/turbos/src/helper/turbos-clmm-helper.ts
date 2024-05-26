@@ -69,6 +69,32 @@ export function getCoinFullAddress(type: string) {
   return [coin_a_address, coin_b_address];
 }
 
+//
+export async function getPoolObject(
+  ctx: SuiContext | SuiObjectContext,
+  pool: string,
+  version?: string
+) {
+  let obj;
+  if (version) {
+    const postObj = await ctx.client.tryGetPastObject({
+      id: pool,
+      version: Number(version),
+      options: { showType: true, showContent: true },
+    });
+    obj = {
+      data: postObj.details,
+    };
+  } else {
+    obj = await ctx.client.getObject({
+      id: pool,
+      options: { showType: true, showContent: true },
+    });
+  }
+
+  return obj;
+}
+
 interface poolInfo {
   name_a: string;
   name_b: string;
@@ -268,12 +294,14 @@ export async function getPoolPrice(
     coin_a2b_price = 1 / coin_b2a_price;
     ctx.meter
       .Gauge("a2b_price")
-      .record(coin_a2b_price, { pairName, pairFullName });
+      .record(coin_a2b_price, { pairName, pairFullName, poolId: pool });
     ctx.meter
       .Gauge("b2a_price")
-      .record(coin_b2a_price, { pairName, pairFullName });
+      .record(coin_b2a_price, { pairName, pairFullName, poolId: pool });
   } catch (e) {
-    console.log(`get pool price error ${e.message}},pool ${pool}, version ${version}`);
+    console.log(
+      `get pool price error ${e.message}},pool ${pool}, version ${version}`
+    );
   }
   return coin_a2b_price;
 }
@@ -302,7 +330,7 @@ export async function calculateValue_USD(
       coin_b_full_address,
       date
     );
-    console.log(`price_a ${price_a}, price_b ${price_b}`);
+    console.log(`sentio sdk price_a ${price_a}, price_b ${price_b}`);
     const coin_a2b_price = await getPoolPrice(ctx, pool, version);
 
     if (price_a) {
@@ -491,6 +519,7 @@ export async function calculateTokenValue_USD(
       name: name_a,
       symbol: poolInfo.symbol_a,
       type: poolInfo.type_a,
+      poolId: pool,
     });
     ctx.meter.Gauge("TVL_by_Token_USD").record(value_b, {
       pairName,
@@ -498,6 +527,7 @@ export async function calculateTokenValue_USD(
       name: name_b,
       symbol: poolInfo.symbol_b,
       type: poolInfo.type_b,
+      poolId: pool,
     });
 
     ctx.meter.Counter("TVL_by_Token_USD_Counter").add(value_b!, {
@@ -506,6 +536,7 @@ export async function calculateTokenValue_USD(
       name: name_b,
       symbol: poolInfo.symbol_b,
       type: poolInfo.type_b,
+      poolId: pool,
     });
     ctx.meter.Counter("TVL_by_Token_USD_Counter").add(value_a!, {
       pairName,
@@ -513,6 +544,7 @@ export async function calculateTokenValue_USD(
       name: name_a,
       symbol: poolInfo.symbol_a,
       type: poolInfo.type_a,
+      poolId: pool,
     });
 
     ctx.meter.Gauge("TVL_by_Token").record(amount_a, {
@@ -521,6 +553,7 @@ export async function calculateTokenValue_USD(
       name: name_a,
       symbol: poolInfo.symbol_a,
       type: poolInfo.type_a,
+      poolId: pool,
     });
     ctx.meter.Gauge("TVL_by_Token").record(amount_b, {
       pairName,
@@ -528,6 +561,7 @@ export async function calculateTokenValue_USD(
       name: name_b,
       symbol: poolInfo.symbol_b,
       type: poolInfo.type_b,
+      poolId: pool,
     });
 
     ctx.meter.Counter("TVL_by_Token_Counter").add(amount_a!, {
@@ -536,6 +570,7 @@ export async function calculateTokenValue_USD(
       name: name_a,
       symbol: poolInfo.symbol_a,
       type: poolInfo.type_a,
+      poolId: pool,
     });
     ctx.meter.Counter("TVL_by_Token_Counter").add(amount_b!, {
       pairName,
@@ -543,6 +578,7 @@ export async function calculateTokenValue_USD(
       name: name_b,
       symbol: poolInfo.symbol_b,
       type: poolInfo.type_b,
+      poolId: pool,
     });
   } catch (e) {
     console.log(`calculate token liquidity usd error ${e.message} at ${pool}`);
@@ -573,7 +609,7 @@ export async function getCurrentTickStatus(
     });
   }
 
-  console.log(`getCurrentTickStatus poolId: ${pool}; version: ${version}, ${JSON.stringify(obj)}`);
+  // console.log(`getCurrentTickStatus poolId: ${pool}; version: ${version}, ${JSON.stringify(obj)}`);
   if (obj!.data.content.fields.tick_current_index.fields.bits) {
     current_tick = obj!.data.content.fields.tick_current_index.fields.bits;
   }
