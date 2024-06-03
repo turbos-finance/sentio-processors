@@ -174,9 +174,9 @@ export async function buildPoolInfo(
     fee_label,
     current_tick,
   ] = ["", "", "", "", 0, 0, "", "", "", "", "NaN", ""];
+  let obj;
   try {
     // @ts-ignore
-    let obj;
     if (version) {
       const postObj = await ctx.client.tryGetPastObject({
         id: pool,
@@ -192,7 +192,9 @@ export async function buildPoolInfo(
         options: { showType: true, showContent: true },
       });
     }
-
+    console.log(
+      `buildPoolInfo ${pool}, getObject value:  ${obj}, ${JSON.stringify(obj)}`
+    );
     // @ts-ignore
     type = obj!.data.type;
     // @ts-ignore
@@ -209,6 +211,9 @@ export async function buildPoolInfo(
     if (type) {
       [coin_a_full_address, coin_b_full_address] = getCoinFullAddress(type);
     }
+    console.log(
+      `buildPoolInfo ${pool}, coin type:  ${coin_a_full_address}, ${coin_b_full_address}`
+    );
     const coinInfo_a = await getOrCreateCoin(ctx, coin_a_full_address);
     const coinInfo_b = await getOrCreateCoin(ctx, coin_b_full_address);
     type_a = coin_a_full_address;
@@ -222,7 +227,11 @@ export async function buildPoolInfo(
     pairName = symbol_a + "-" + symbol_b + " " + fee_label;
     pairFullName = coinInfo_a.name + "-" + coinInfo_b.name + " " + fee_label;
   } catch (e) {
-    console.log(`Build pool error ${e.message}}`);
+    console.log(
+      `Build pool error ${
+        e.message
+      } pool: ${pool} , obj : ${obj} ${JSON.stringify(obj)}`
+    );
   }
 
   return {
@@ -300,7 +309,9 @@ export async function getPoolPrice(
       .record(coin_b2a_price, { pairName, pairFullName, poolId: pool });
   } catch (e) {
     console.log(
-      `get pool price error ${e.message}},pool ${pool}, version ${version}`
+      `get pool price error ${
+        e.message
+      }},pool ${pool}, version ${version}, obj:${obj} , ${JSON.stringify(obj)}`
     );
   }
   return coin_a2b_price;
@@ -350,7 +361,7 @@ export async function calculateValue_USD(
       );
     }
   } catch (e) {
-    console.log(` calculate value error ${e.message}}`);
+    console.log(`calculate value error ${e.message} , pool : #${pool}`);
   }
   return [value_a, value_b];
 }
@@ -408,9 +419,10 @@ export async function getPoolRewardCoinType(
     symbol: "",
     decimals: 9,
   };
+  let obj;
   try {
     // @ts-ignore
-    const obj = await ctx.client.getObject({
+    obj = await ctx.client.getObject({
       id: objectId,
       options: { showType: true, showContent: true },
     });
@@ -423,7 +435,11 @@ export async function getPoolRewardCoinType(
     rewardCoin.symbol = coin!.symbol;
     rewardCoin.decimals = coin!.decimals;
   } catch (e) {
-    console.log(`get pool reward coin type error ${e.message}}`);
+    console.log(
+      `get pool reward coin type error ${
+        e.message
+      }, objectId:${objectId}, obj:${obj}, ${JSON.stringify(obj)}`
+    );
   }
   return rewardCoin;
 }
@@ -683,7 +699,9 @@ export async function getVaultCoinType(
     rewardCoin.symbol = coin!.symbol;
     rewardCoin.decimals = coin!.decimals;
   } catch (e) {
-    console.log(`get pool reward coin type error ${e.message}}`);
+    console.log(
+      `get pool reward coin type error ${e.message} objectId: ${objectId}`
+    );
   }
   return rewardCoin;
 }

@@ -403,7 +403,7 @@ position_manager
       const sender = event.sender;
 
       const poolInfo = await helper.getOrCreatePool(ctx, pool);
-
+      console.log(`onEventCollectEvent poolInfo: ${JSON.stringify(poolInfo)}`)
       const pairName = poolInfo.pairName;
       const pairFullName = poolInfo.pairFullName;
 
