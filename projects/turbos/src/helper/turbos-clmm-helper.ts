@@ -71,7 +71,15 @@ export function getCoinFullAddress(type: string) {
 }
 
 // cache object
+// pool 1min cache
 const poolCache = new LRUCache({
+  max: 2000,
+  maxSize: 5000,
+  ttl: 1000 * 60 * 1,
+});
+
+// version pool 5min cache
+const poolVersionCache = new LRUCache({
   max: 2000,
   maxSize: 5000,
   ttl: 1000 * 60 * 5,
@@ -82,10 +90,19 @@ export async function setOrGetPoolObject(
   pool: string,
   version?: string
 ) {
-  let poolInfo = poolCache.get(`${pool}${version}`);
+  let poolInfo = poolCache.get(`${pool}`);
+
+  if (version) {
+    poolInfo = poolVersionCache.get(`${pool}${version}`);
+  }
+
   if (!poolInfo) {
     poolInfo = getPoolObject(ctx, pool, version);
-    poolCache.set(pool, poolInfo);
+    if (version) {
+      poolVersionCache.set(`${pool}${version}`, poolInfo);
+    } else {
+      poolCache.set(pool, poolInfo);
+    }
     console.log("set pool object for: " + pool + ", version: " + version);
   }
   return await poolInfo;
