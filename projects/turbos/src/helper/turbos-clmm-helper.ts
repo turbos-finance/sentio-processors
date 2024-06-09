@@ -8,6 +8,7 @@ import { getPriceByType, token } from "@sentio/sdk/utils";
 import * as constant from "../constant-turbos.js";
 import { SuiNetwork } from "@sentio/sdk/sui";
 import axios from "axios";
+import { LRUCache } from "lru-cache";
 
 export const MAX_TICK_INDEX = 443636;
 export const MIN_TICK_INDEX = -443636;
@@ -69,7 +70,27 @@ export function getCoinFullAddress(type: string) {
   return [coin_a_address, coin_b_address];
 }
 
-//
+// cache object
+const poolCache = new LRUCache({
+  max: 2000,
+  maxSize: 5000,
+  ttl: 1000 * 60 * 5,
+});
+
+export async function setOrGetPoolObject(
+  ctx: SuiContext | SuiObjectContext,
+  pool: string,
+  version?: string
+) {
+  let poolInfo = poolCache.get(`${pool}${version}`);
+  if (!poolInfo) {
+    poolInfo = getPoolObject(ctx, pool, version);
+    poolCache.set(pool, poolInfo);
+    console.log("set pool object for: " + pool + ", version: " + version);
+  }
+  return await poolInfo;
+}
+
 export async function getPoolObject(
   ctx: SuiContext | SuiObjectContext,
   pool: string,
@@ -230,7 +251,12 @@ export async function buildPoolInfo(
     console.log(
       `Build pool error ${
         e.message
-      } pool: ${pool} , obj : ${obj} ${JSON.stringify(obj)}`
+      } pool: ${pool} ,version: ${version} obj : ${obj} ${JSON.stringify(obj)}`
+    );
+    throw new Error(
+      `Build pool error ${
+        e.message
+      } pool: ${pool}, version: ${version}, obj : ${obj} ${JSON.stringify(obj)}`
     );
   }
 
@@ -309,6 +335,11 @@ export async function getPoolPrice(
       .record(coin_b2a_price, { pairName, pairFullName, poolId: pool });
   } catch (e) {
     console.log(
+      `get pool price error ${
+        e.message
+      }},pool ${pool}, version ${version}, obj:${obj} , ${JSON.stringify(obj)}`
+    );
+    throw new Error(
       `get pool price error ${
         e.message
       }},pool ${pool}, version ${version}, obj:${obj} , ${JSON.stringify(obj)}`
@@ -410,39 +441,44 @@ export async function calculateSwapVol_USD(
   return [vol, price_a, price_b];
 }
 
-export async function getPoolRewardCoinType(
-  ctx: SuiContext | SuiObjectContext,
-  objectId: string
-) {
-  const rewardCoin = {
-    type: "",
-    symbol: "",
-    decimals: 9,
-  };
-  let obj;
-  try {
-    // @ts-ignore
-    obj = await ctx.client.getObject({
-      id: objectId,
-      options: { showType: true, showContent: true },
-    });
-    const type = obj!.data.content.type;
-    const typeArray = type.match(/\<([^)]*)\>/);
-    const coinType = typeArray[1];
-    const coin = await ctx.client.getCoinMetadata({ coinType });
+// export async function getPoolRewardCoinType(
+//   ctx: SuiContext | SuiObjectContext,
+//   objectId: string
+// ) {
+//   const rewardCoin = {
+//     type: "",
+//     symbol: "",
+//     decimals: 9,
+//   };
+//   let obj;
+//   try {
+//     // @ts-ignore
+//     obj = await ctx.client.getObject({
+//       id: objectId,
+//       options: { showType: true, showContent: true },
+//     });
+//     const type = obj!.data.content.type;
+//     const typeArray = type.match(/\<([^)]*)\>/);
+//     const coinType = typeArray[1];
+//     const coin = await ctx.client.getCoinMetadata({ coinType });
 
-    rewardCoin.type = coinType;
-    rewardCoin.symbol = coin!.symbol;
-    rewardCoin.decimals = coin!.decimals;
-  } catch (e) {
-    console.log(
-      `get pool reward coin type error ${
-        e.message
-      }, objectId:${objectId}, obj:${obj}, ${JSON.stringify(obj)}`
-    );
-  }
-  return rewardCoin;
-}
+//     rewardCoin.type = coinType;
+//     rewardCoin.symbol = coin!.symbol;
+//     rewardCoin.decimals = coin!.decimals;
+//   } catch (e) {
+//     console.log(
+//       `get pool reward coin type error ${
+//         e.message
+//       }, objectId:${objectId}, obj:${obj}, ${JSON.stringify(obj)}`
+//     );
+//     throw new Error(
+//       `get pool reward coin type error ${
+//         e.message
+//       }, objectId:${objectId}, obj:${obj}, ${JSON.stringify(obj)}`
+//     );
+//   }
+//   return rewardCoin;
+// }
 
 export async function calculateTokenValue_USD(
   ctx: SuiContext | SuiObjectContext,
@@ -475,7 +511,6 @@ export async function calculateTokenValue_USD(
         options: { showType: true, showContent: true },
       });
     }
-
     const coin_a = Number(obj!.data.content.fields.coin_a || 0);
     const coin_b = Number(obj!.data.content.fields.coin_b || 0);
 
@@ -598,6 +633,9 @@ export async function calculateTokenValue_USD(
     });
   } catch (e) {
     console.log(`calculate token liquidity usd error ${e.message} at ${pool}`);
+    throw new Error(
+      `calculate token liquidity usd error ${e.message} at ${pool}, version: ${version}`
+    );
   }
 }
 
@@ -609,20 +647,27 @@ export async function getCurrentTickStatus(
   let current_tick = "";
   // @ts-ignore
   let obj;
-  if (version) {
-    const postObj = await ctx.client.tryGetPastObject({
-      id: pool,
-      version: Number(version),
-      options: { showType: true, showContent: true },
-    });
-    obj = {
-      data: postObj.details,
-    };
-  } else {
-    obj = await ctx.client.getObject({
-      id: pool,
-      options: { showType: true, showContent: true },
-    });
+  try {
+    if (version) {
+      const postObj = await ctx.client.tryGetPastObject({
+        id: pool,
+        version: Number(version),
+        options: { showType: true, showContent: true },
+      });
+      obj = {
+        data: postObj.details,
+      };
+    } else {
+      obj = await ctx.client.getObject({
+        id: pool,
+        options: { showType: true, showContent: true },
+      });
+    }
+  } catch (err) {
+    console.log(`get pool current tick error: ${err.message}, pool: ${pool}`);
+    throw new Error(
+      `get pool current tick error: ${err.message}, pool: ${pool}, version: ${version}`
+    );
   }
 
   // console.log(`getCurrentTickStatus poolId: ${pool}; version: ${version}, ${JSON.stringify(obj)}`);
@@ -675,6 +720,28 @@ export async function getTurbosPool(pool: string) {
   };
 }
 
+// cache VaultCoinType
+interface VaultCoinType {
+  type: string;
+  symbol: string;
+  decimals: number;
+}
+
+let vaultCoinTypeMap = new Map<string, Promise<VaultCoinType>>();
+
+export async function setOrGetCoinType(
+  ctx: SuiContext | SuiObjectContext,
+  objectId: string
+) {
+  let vaultCoinInfo = vaultCoinTypeMap.get(objectId);
+  if (!vaultCoinInfo) {
+    vaultCoinInfo = getVaultCoinType(ctx, objectId);
+    vaultCoinTypeMap.set(objectId, vaultCoinInfo);
+    console.log("set vaultCoinType for " + objectId);
+  }
+  return await vaultCoinInfo;
+}
+
 export async function getVaultCoinType(
   ctx: SuiContext | SuiObjectContext,
   objectId: string
@@ -693,14 +760,18 @@ export async function getVaultCoinType(
     const type = obj!.data.content.type;
     const typeArray = type.match(/\<([^)]*)\>/);
     const coinType = typeArray[1];
-    const coin = await ctx.client.getCoinMetadata({ coinType });
+    const coin = buildCoinInfo(ctx, coinType);
+    // const coin = await ctx.client.getCoinMetadata({ coinType });
 
     rewardCoin.type = coinType;
     rewardCoin.symbol = coin!.symbol;
     rewardCoin.decimals = coin!.decimals;
   } catch (e) {
     console.log(
-      `get pool reward coin type error ${e.message} objectId: ${objectId}`
+      `get pool or vault reward coin type error ${e.message} objectId: ${objectId}`
+    );
+    throw new Error(
+      `get pool or vault reward coin type error ${e.message} objectId: ${objectId}`
     );
   }
   return rewardCoin;

@@ -345,7 +345,7 @@ pool
     const reward_vault = event.data_decoded.reward_vault;
     const sender = event.sender;
 
-    const { type, symbol, decimals } = await helper.getPoolRewardCoinType(
+    const { type, symbol, decimals } = await helper.setOrGetCoinType(
       ctx,
       reward_vault
     );
@@ -448,7 +448,7 @@ position_manager
     const vault = event.data_decoded.vault;
     const sender = event.sender;
 
-    const vaultCoin = await helper.getVaultCoinType(ctx, vault);
+    const vaultCoin = await helper.setOrGetCoinType(ctx, vault);
     const poolInfo = await helper.getOrCreatePool(ctx, pool);
 
     const price = await getPriceByType(network, vaultCoin.type, ctx.timestamp);
