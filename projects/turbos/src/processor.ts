@@ -51,6 +51,11 @@ pool_factory
       const fee = event.data_decoded.fee;
       const sqrt_price = event.data_decoded.sqrt_price;
 
+      const poolInfo = await helper.getOrCreatePool(
+        ctx,
+        pool,
+      );
+
       ctx.eventLogger.emit("CreatePoolEvent", {
         distinctId: account,
         account,
@@ -59,6 +64,10 @@ pool_factory
         tick_spacing,
         fee,
         sqrt_price,
+        token_a_symbol: poolInfo.symbol_a,
+        token_b_symbol: poolInfo.symbol_b,
+        token_a_address: poolInfo.type_a,
+        token_b_address: poolInfo.type_b
       });
 
       const mutated = ctx.transaction.effects?.mutated;
@@ -354,7 +363,7 @@ pool
       .dividedBy(10 ** decimals)
       .toNumber();
     console.log(
-      `onEventUpdateRewardEmissionsEvent decimals:${decimals}, reward_emissions_per_second:${reward_emissions_per_second.toString()}, day amount:${dayAmount}`
+      `onEventUpdateRewardEmissionsEvent decimals:${decimals}, reward_emissions_per_second:${reward_emissions_per_second.toString()}, day amount:${dayAmount}, reward_vault: ${reward_vault}`
     );
     // ctx.meter.Gauge("day_reward_amount").record(dayAmount, { pairName, pairFullName, type, symbol });
     day_reward_amount.record(ctx, dayAmount, {
@@ -403,7 +412,7 @@ position_manager
       const sender = event.sender;
 
       const poolInfo = await helper.getOrCreatePool(ctx, pool);
-      console.log(`onEventCollectEvent poolInfo: ${JSON.stringify(poolInfo)}`)
+      console.log(`onEventCollectEvent poolInfo: ${JSON.stringify(poolInfo)}`);
       const pairName = poolInfo.pairName;
       const pairFullName = poolInfo.pairFullName;
 

@@ -32,6 +32,12 @@ const wormholeTokens = new Set([
   "0xb7844e289a8410e50fb3ca48d69eb9cf29e27d223ef90353fe1bd8e27ff8f3f8",
 ]);
 
+async function delay(timeout: number) {
+  await new Promise((resolve) => {
+    setTimeout(resolve, timeout);
+  });
+}
+
 export function getBridgeInfo(address: string) {
   if (wormholeTokens.has(address)) {
     return "wormhole";
@@ -73,16 +79,9 @@ export function getCoinFullAddress(type: string) {
 // cache object
 // pool 1min cache
 const poolCache = new LRUCache({
-  max: 2000,
-  maxSize: 5000,
+  // max: 2000,
+  // maxSize: 5000,
   ttl: 1000 * 60 * 1,
-});
-
-// version pool 5min cache
-const poolVersionCache = new LRUCache({
-  max: 2000,
-  maxSize: 5000,
-  ttl: 1000 * 60 * 5,
 });
 
 export async function setOrGetPoolObject(
@@ -90,19 +89,11 @@ export async function setOrGetPoolObject(
   pool: string,
   version?: string
 ) {
-  let poolInfo = poolCache.get(`${pool}`);
-
-  if (version) {
-    poolInfo = poolVersionCache.get(`${pool}${version}`);
-  }
+  let poolInfo = poolCache.get(`${pool}${version || ""}`);
 
   if (!poolInfo) {
     poolInfo = getPoolObject(ctx, pool, version);
-    if (version) {
-      poolVersionCache.set(`${pool}${version}`, poolInfo);
-    } else {
-      poolCache.set(pool, poolInfo);
-    }
+    poolCache.set(`${pool}${version || ""}`, poolInfo);
     console.log("set pool object for: " + pool + ", version: " + version);
   }
   return await poolInfo;
@@ -114,20 +105,34 @@ export async function getPoolObject(
   version?: string
 ) {
   let obj;
-  if (version) {
-    const postObj = await ctx.client.tryGetPastObject({
-      id: pool,
-      version: Number(version),
-      options: { showType: true, showContent: true },
-    });
-    obj = {
-      data: postObj.details,
-    };
-  } else {
-    obj = await ctx.client.getObject({
-      id: pool,
-      options: { showType: true, showContent: true },
-    });
+  let retryCounter = 0;
+  while (retryCounter++ <= 20) {
+    try {
+      if (!!version) {
+        const postObj = await ctx.client.tryGetPastObject({
+          id: pool,
+          version: Number(version),
+          options: { showType: true, showContent: true },
+        });
+        obj = {
+          data: postObj.details,
+        };
+      } else {
+        obj = await ctx.client.getObject({
+          id: pool,
+          options: { showType: true, showContent: true },
+        });
+      }
+    } catch (err) {
+      if (retryCounter == 20) {
+        throw new Error(
+          "get pool object for: " + pool + ", version: " + version
+        );
+      }
+      await delay(10000);
+      continue;
+    }
+    break;
   }
 
   return obj;
@@ -215,21 +220,11 @@ export async function buildPoolInfo(
   let obj;
   try {
     // @ts-ignore
-    if (version) {
-      const postObj = await ctx.client.tryGetPastObject({
-        id: pool,
-        version: Number(version),
-        options: { showType: true, showContent: true },
-      });
-      obj = {
-        data: postObj.details,
-      };
-    } else {
-      obj = await ctx.client.getObject({
-        id: pool,
-        options: { showType: true, showContent: true },
-      });
-    }
+    obj = await setOrGetPoolObject(
+      ctx,
+      pool,
+      version ? Number(version) : undefined
+    );
     console.log(
       `buildPoolInfo ${pool}, getObject value:  ${obj}, ${JSON.stringify(obj)}`
     );
@@ -315,22 +310,11 @@ export async function getPoolPrice(
   let coin_a2b_price = 0;
   try {
     // @ts-ignore
-    let obj;
-    if (version) {
-      const postObj = await ctx.client.tryGetPastObject({
-        id: pool,
-        version: Number(version),
-        options: { showType: true, showContent: true },
-      });
-      obj = {
-        data: postObj.details,
-      };
-    } else {
-      obj = await ctx.client.getObject({
-        id: pool,
-        options: { showType: true, showContent: true },
-      });
-    }
+    let obj = await setOrGetPoolObject(
+      ctx,
+      pool,
+      version ? Number(version) : undefined
+    );
     const sqrt_price = Number(obj!.data.content.fields.sqrt_price);
     if (!sqrt_price) {
       console.log(`get pool price error at ${ctx}`);
@@ -409,7 +393,9 @@ export async function calculateValue_USD(
       );
     }
   } catch (e) {
-    console.log(`calculate value error ${e.message} , pool : #${pool}`);
+    console.log(
+      `calculate value error ${e.message} , pool : #${pool}, version: ${version}`
+    );
   }
   return [value_a, value_b];
 }
@@ -512,22 +498,11 @@ export async function calculateTokenValue_USD(
 
   try {
     // @ts-ignore
-    let obj;
-    if (version) {
-      const postObj = await ctx.client.tryGetPastObject({
-        id: pool,
-        version: Number(version),
-        options: { showType: true, showContent: true },
-      });
-      obj = {
-        data: postObj.details,
-      };
-    } else {
-      obj = await ctx.client.getObject({
-        id: pool,
-        options: { showType: true, showContent: true },
-      });
-    }
+    let obj = await setOrGetPoolObject(
+      ctx,
+      pool,
+      version ? Number(version) : undefined
+    );
     const coin_a = Number(obj!.data.content.fields.coin_a || 0);
     const coin_b = Number(obj!.data.content.fields.coin_b || 0);
 
@@ -536,7 +511,9 @@ export async function calculateTokenValue_USD(
     const [coin_a_full_address, coin_b_full_address] = getCoinFullAddress(
       poolInfo.type
     );
-
+    console.log(
+      `type :${poolInfo.type}, type_a: ${coin_a_full_address}, type_b: ${coin_b_full_address}`
+    );
     const pairName = poolInfo.pairName;
     const pairFullName = poolInfo.pairFullName;
     const name_a = poolInfo.name_a;
@@ -649,7 +626,9 @@ export async function calculateTokenValue_USD(
       poolId: pool,
     });
   } catch (e) {
-    console.log(`calculate token liquidity usd error ${e.message} at ${pool}`);
+    console.log(
+      `calculate token liquidity usd error ${e.message} at ${pool}, version: ${version}`
+    );
     throw new Error(
       `calculate token liquidity usd error ${e.message} at ${pool}, version: ${version}`
     );
@@ -665,23 +644,15 @@ export async function getCurrentTickStatus(
   // @ts-ignore
   let obj;
   try {
-    if (version) {
-      const postObj = await ctx.client.tryGetPastObject({
-        id: pool,
-        version: Number(version),
-        options: { showType: true, showContent: true },
-      });
-      obj = {
-        data: postObj.details,
-      };
-    } else {
-      obj = await ctx.client.getObject({
-        id: pool,
-        options: { showType: true, showContent: true },
-      });
-    }
+    obj = await setOrGetPoolObject(
+      ctx,
+      pool,
+      version ? Number(version) : undefined
+    );
   } catch (err) {
-    console.log(`get pool current tick error: ${err.message}, pool: ${pool}`);
+    console.log(
+      `get pool current tick error: ${err.message}, pool: ${pool}, version: ${version}`
+    );
     throw new Error(
       `get pool current tick error: ${err.message}, pool: ${pool}, version: ${version}`
     );
@@ -777,12 +748,11 @@ export async function getVaultCoinType(
     const type = obj!.data.content.type;
     const typeArray = type.match(/\<([^)]*)\>/);
     const coinType = typeArray[1];
-    const coin = buildCoinInfo(ctx, coinType);
+    const coin = await getOrCreateCoin(ctx, coinType);
     // const coin = await ctx.client.getCoinMetadata({ coinType });
-
     rewardCoin.type = coinType;
     rewardCoin.symbol = coin!.symbol;
-    rewardCoin.decimals = coin!.decimals;
+    rewardCoin.decimals = coin!.decimal;
   } catch (e) {
     console.log(
       `get pool or vault reward coin type error ${e.message} objectId: ${objectId}`
