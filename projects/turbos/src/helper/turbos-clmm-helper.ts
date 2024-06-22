@@ -108,7 +108,7 @@ export async function getPoolObject(
   let retryCounter = 0;
   while (retryCounter++ <= 20) {
     try {
-      if (!!version) {
+      if (version) {
         const postObj = await ctx.client.tryGetPastObject({
           id: pool,
           version: Number(version),
@@ -216,15 +216,11 @@ export async function buildPoolInfo(
     type,
     fee_label,
     current_tick,
-  ] = ["", "", "", "", 0, 0, "", "", "", "", "NaN", ""];
+  ] = ["", "", "", "", 0, 0, "", "", "", "", "", ""];
   let obj;
   try {
     // @ts-ignore
-    obj = await setOrGetPoolObject(
-      ctx,
-      pool,
-      version ? Number(version) : undefined
-    );
+    obj = await setOrGetPoolObject(ctx, pool, version);
     console.log(
       `buildPoolInfo ${pool}, getObject value:  ${obj}, ${JSON.stringify(obj)}`
     );
@@ -310,11 +306,7 @@ export async function getPoolPrice(
   let coin_a2b_price = 0;
   try {
     // @ts-ignore
-    let obj = await setOrGetPoolObject(
-      ctx,
-      pool,
-      version ? Number(version) : undefined
-    );
+    let obj = await setOrGetPoolObject(ctx, pool, version);
     const sqrt_price = Number(obj!.data.content.fields.sqrt_price);
     if (!sqrt_price) {
       console.log(`get pool price error at ${ctx}`);
@@ -363,16 +355,8 @@ export async function calculateValue_USD(
     const [coin_a_full_address, coin_b_full_address] = getCoinFullAddress(
       poolInfo.type
     );
-    const price_a = await getPriceByType(
-      SuiNetwork.MAIN_NET,
-      coin_a_full_address,
-      date
-    );
-    const price_b = await getPriceByType(
-      SuiNetwork.MAIN_NET,
-      coin_b_full_address,
-      date
-    );
+    const price_a = await tryCatchGetPrice(coin_a_full_address, date);
+    const price_b = await tryCatchGetPrice(coin_b_full_address, date);
     console.log(`sentio sdk price_a ${price_a}, price_b ${price_b}`);
     const coin_a2b_price = await getPoolPrice(ctx, pool, version);
 
@@ -394,7 +378,7 @@ export async function calculateValue_USD(
     }
   } catch (e) {
     console.log(
-      `calculate value error ${e.message} , pool : #${pool}, version: ${version}`
+      `calculate value error ${e.message} , pool : ${pool}, version: ${version}`
     );
   }
   return [value_a, value_b];
@@ -411,19 +395,10 @@ export async function calculateSwapVol_USD(
   let price_a;
   let price_b;
 
-  console.log(`calculateSwapVol_USD type: ${type}`);
   try {
     const [coin_a_full_address, coin_b_full_address] = getCoinFullAddress(type);
-    price_a = await getPriceByType(
-      SuiNetwork.MAIN_NET,
-      coin_a_full_address,
-      date
-    );
-    price_b = await getPriceByType(
-      SuiNetwork.MAIN_NET,
-      coin_b_full_address,
-      date
-    );
+    price_a = await tryCatchGetPrice(coin_a_full_address, date);
+    price_b = await tryCatchGetPrice(coin_b_full_address, date);
 
     if (price_a) {
       vol = amount_a * price_a;
@@ -439,7 +414,7 @@ export async function calculateSwapVol_USD(
       );
     }
   } catch (e) {
-    console.log(` calculate swap value error ${e.message} at ${type}`);
+    console.log(`calculate swap value error ${e.message} at ${type}`);
   }
   return [vol, price_a, price_b];
 }
@@ -495,14 +470,9 @@ export async function calculateTokenValue_USD(
   if (await getCurrentTickStatus(ctx, pool, version)) {
     return;
   }
-
   try {
     // @ts-ignore
-    let obj = await setOrGetPoolObject(
-      ctx,
-      pool,
-      version ? Number(version) : undefined
-    );
+    let obj = await setOrGetPoolObject(ctx, pool, version);
     const coin_a = Number(obj!.data.content.fields.coin_a || 0);
     const coin_b = Number(obj!.data.content.fields.coin_b || 0);
 
@@ -511,24 +481,13 @@ export async function calculateTokenValue_USD(
     const [coin_a_full_address, coin_b_full_address] = getCoinFullAddress(
       poolInfo.type
     );
-    console.log(
-      `type :${poolInfo.type}, type_a: ${coin_a_full_address}, type_b: ${coin_b_full_address}`
-    );
     const pairName = poolInfo.pairName;
     const pairFullName = poolInfo.pairFullName;
     const name_a = poolInfo.name_a;
     const name_b = poolInfo.name_b;
 
-    const price_a = await getPriceByType(
-      SuiNetwork.MAIN_NET,
-      coin_a_full_address,
-      date
-    );
-    const price_b = await getPriceByType(
-      SuiNetwork.MAIN_NET,
-      coin_b_full_address,
-      date
-    );
+    const price_a = await tryCatchGetPrice(coin_a_full_address, date);
+    const price_b = await tryCatchGetPrice(coin_b_full_address, date);
     const coin_a2b_price = await getPoolPrice(ctx, pool, version);
 
     const amount_a = Number(coin_a) / 10 ** poolInfo.decimal_a;
@@ -644,11 +603,7 @@ export async function getCurrentTickStatus(
   // @ts-ignore
   let obj;
   try {
-    obj = await setOrGetPoolObject(
-      ctx,
-      pool,
-      version ? Number(version) : undefined
-    );
+    obj = await setOrGetPoolObject(ctx, pool, version);
   } catch (err) {
     console.log(
       `get pool current tick error: ${err.message}, pool: ${pool}, version: ${version}`
@@ -762,4 +717,12 @@ export async function getVaultCoinType(
     );
   }
   return rewardCoin;
+}
+
+async function tryCatchGetPrice(coin_address: string, date: Date) {
+  try {
+    const price = await getPriceByType(SuiNetwork.MAIN_NET, coin_address, date);
+    return price;
+  } catch (e) {}
+  return;
 }
