@@ -51,10 +51,7 @@ pool_factory
       const fee = event.data_decoded.fee;
       const sqrt_price = event.data_decoded.sqrt_price;
 
-      const poolInfo = await helper.getOrCreatePool(
-        ctx,
-        pool,
-      );
+      const poolInfo = await helper.getOrCreatePool(ctx, pool);
 
       ctx.eventLogger.emit("CreatePoolEvent", {
         distinctId: account,
@@ -67,7 +64,9 @@ pool_factory
         token_a_symbol: poolInfo.symbol_a,
         token_b_symbol: poolInfo.symbol_b,
         token_a_address: poolInfo.type_a,
-        token_b_address: poolInfo.type_b
+        token_b_address: poolInfo.type_b,
+        pairName: poolInfo.pairName,
+        pairFullName: poolInfo.pairFullName,
       });
 
       const mutated = ctx.transaction.effects?.mutated;
@@ -130,7 +129,7 @@ pool
         Number(event.data_decoded.amount_b) / Math.pow(10, decimal_b);
 
       console.log(
-        `swapevent calculateSwapVol_USD pool:${pool} ;type:${poolInfo.type}`
+        `swapevent calculateSwapVol_USD pool:${pool} ;type:${poolInfo.type},checkpoint: ${ctx.transaction.checkpoint}`
       );
       const [usd_volume, price_a, price_b] = await helper.calculateSwapVol_USD(
         poolInfo.type,
@@ -157,11 +156,13 @@ pool
 
       ctx.eventLogger.emit("SwapEvent", {
         distinctId: sender,
+        digest: ctx.transaction.digest,
+        checkpoint: ctx.transaction.checkpoint,
         recipient,
         pool,
         sqrt_price,
-        type_a,
-        type_b,
+        token_a_address: type_a,
+        token_b_address: type_b,
         amount_a,
         amount_b,
         price_a,
@@ -175,8 +176,8 @@ pool
         is_exact_in,
         fee_amount,
         fee_usd,
-        symbol_a,
-        symbol_b,
+        token_a_symbol: symbol_a,
+        token_b_symbol: symbol_b,
         coin_symbol: atob ? symbol_a : symbol_b, //for amount_in
         pairName,
         pairFullName,
@@ -197,7 +198,8 @@ pool
         price_a_gauge.record(ctx, price_a, {
           pairName,
           pairFullName,
-          symbol_a,
+          token_address: type_a,
+          token_symbol: symbol_a,
           poolId: pool,
         });
       }
@@ -205,7 +207,8 @@ pool
         price_b_gauge.record(ctx, price_b, {
           pairName,
           pairFullName,
-          symbol_b,
+          token_address: type_b,
+          token_symbol: symbol_b,
           poolId: pool,
         });
       }
@@ -262,6 +265,10 @@ pool
         amount_a,
         amount_b,
         value,
+        token_a_symbol: poolInfo.symbol_a,
+        token_b_symbol: poolInfo.symbol_b,
+        token_a_address: poolInfo.type_a,
+        token_b_address: poolInfo.type_b,
         pairName,
         pairFullName,
         message: `Add USD$${value} Liquidity in ${pairFullName}`,
@@ -321,6 +328,10 @@ pool
         liquidity_delta,
         amount_a,
         amount_b,
+        token_a_symbol: poolInfo.symbol_a,
+        token_b_symbol: poolInfo.symbol_b,
+        token_a_address: poolInfo.type_a,
+        token_b_address: poolInfo.type_b,
         value,
         pairName,
         pairFullName,
@@ -383,10 +394,10 @@ pool
       reward_index,
       reward_manager,
       reward_vault,
-      reward_coin_type: type,
-      reward_coin_symbol: symbol,
-      reward_coin_decimals: decimals,
-      reward_coin_day_amount: dayAmount,
+      reward_token_address: type,
+      reward_token_symbol: symbol,
+      reward_token_decimals: decimals,
+      reward_token_day_amount: dayAmount,
       message: `Update Reward Emissions in ${pairFullName}`,
     });
   });
@@ -435,13 +446,13 @@ position_manager
         pairFullName,
         amount_a: _amount_a,
         amount_a_usd: value_a,
-        symbol_a: poolInfo.symbol_a,
-        type_a: poolInfo.type_b,
+        token_a_symbol: poolInfo.symbol_a,
+        token_a_address: poolInfo.type_a,
         amount_b: _amount_b,
         amount_b_usd: value_b,
-        symbol_b: poolInfo.symbol_b,
+        token_b_symbol: poolInfo.symbol_b,
+        token_b_address: poolInfo.type_b,
         amount_usd: value_a + value_b,
-        type_b: poolInfo.type_b,
         recipientAddress,
         message: `collect ${_amount_a} ${poolInfo.symbol_a} and  ${_amount_b} ${poolInfo.symbol_b} fee`,
       });
@@ -478,8 +489,8 @@ position_manager
       reward_index,
       recipientAddress,
       vault,
-      vault_symbol: vaultCoin.symbol,
-      vault_coinType: vaultCoin.type,
+      token_symbol: vaultCoin.symbol,
+      token_address: vaultCoin.type,
       message: `collect ${_amount} ${vaultCoin.symbol} reward`,
     });
   });
@@ -527,7 +538,8 @@ const template = new SuiObjectProcessorTemplate().onTimeInterval(
         );
         if (coin_a_balance) {
           ctx.meter.Gauge("coin_a_balance").record(coin_a_balance, {
-            coin_symbol: symbol_a,
+            token_symbol: symbol_a,
+            token_address: poolInfo.type_a,
             pairName,
             pairFullName,
             poolId: ctx.objectId,
@@ -536,7 +548,8 @@ const template = new SuiObjectProcessorTemplate().onTimeInterval(
 
         if (coin_b_balance) {
           ctx.meter.Gauge("coin_b_balance").record(coin_b_balance, {
-            coin_symbol: symbol_b,
+            token_symbol: symbol_b,
+            token_address: poolInfo.type_b,
             pairName,
             pairFullName,
             poolId: ctx.objectId,
@@ -562,16 +575,16 @@ const template = new SuiObjectProcessorTemplate().onTimeInterval(
             pairName,
             pairFullName,
             bridge: coin_a_bridge,
-            coin: coin_a_address,
-            symbol: symbol_a,
+            token_address: coin_a_address,
+            token_symbol: symbol_a,
             poolId: ctx.objectId,
           });
           ctx.meter.Gauge("TVL_by_Pool_Token_USD").record(0, {
             pairName,
             pairFullName,
             bridge: coin_b_bridge,
-            coin: coin_b_address,
-            symbol: symbol_b,
+            token_address: coin_b_address,
+            token_symbol: symbol_b,
             poolId: ctx.objectId,
           });
         } else {
@@ -591,16 +604,16 @@ const template = new SuiObjectProcessorTemplate().onTimeInterval(
             pairName,
             pairFullName,
             bridge: coin_a_bridge,
-            coin: coin_a_address,
-            symbol: symbol_a,
+            token_address: coin_a_address,
+            token_symbol: symbol_a,
             poolId: ctx.objectId,
           });
           ctx.meter.Gauge("TVL_by_Pool_Token_USD").record(tvl_b, {
             pairName,
             pairFullName,
             bridge: coin_b_bridge,
-            coin: coin_b_address,
-            symbol: symbol_b,
+            token_address: coin_b_address,
+            token_symbol: symbol_b,
             poolId: ctx.objectId,
           });
 

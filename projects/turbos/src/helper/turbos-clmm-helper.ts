@@ -93,6 +93,15 @@ export async function setOrGetPoolObject(
 
   if (!poolInfo) {
     poolInfo = getPoolObject(ctx, pool, version);
+
+    poolInfo.catch((e) => {
+      setTimeout(() => {
+        if (poolCache.get(`${pool}${version || ""}`) === poolInfo) {
+          poolCache.delete(`${pool}${version || ""}`);
+        }
+      }, 1000);
+    });
+
     poolCache.set(`${pool}${version || ""}`, poolInfo);
     console.log("set pool object for: " + pool + ", version: " + version);
   }
@@ -126,7 +135,7 @@ export async function getPoolObject(
     } catch (err) {
       if (retryCounter == 20) {
         throw new Error(
-          "get pool object for: " + pool + ", version: " + version
+          "error for get pool object : " + pool + ", version: " + version
         );
       }
       await delay(10000);
@@ -186,6 +195,15 @@ export const getOrCreateCoin = async function (
   let coinInfo = coinInfoMap.get(coinAddress);
   if (!coinInfo) {
     coinInfo = buildCoinInfo(ctx, coinAddress);
+
+    coinInfo.catch((e) => {
+      setTimeout(() => {
+        if (coinInfoMap.get(coinAddress) === coinInfo) {
+          coinInfoMap.delete(coinAddress);
+        }
+      }, 1000);
+    });
+
     coinInfoMap.set(coinAddress, coinInfo);
     console.log("set coinInfoMap for " + coinAddress);
   }
@@ -292,6 +310,15 @@ export const getOrCreatePool = async function (
   let infoPromise = poolInfoMap.get(pool);
   if (!infoPromise) {
     infoPromise = buildPoolInfo(ctx, pool, version);
+
+    infoPromise.catch((e) => {
+      setTimeout(() => {
+        if (poolInfoMap.get(pool) === infoPromise) {
+          poolInfoMap.delete(pool);
+        }
+      }, 1000);
+    });
+
     poolInfoMap.set(pool, infoPromise);
     console.log("set poolInfoMap for " + pool);
   }
@@ -322,10 +349,22 @@ export async function getPoolPrice(
     coin_a2b_price = 1 / coin_b2a_price;
     ctx.meter
       .Gauge("a2b_price")
-      .record(coin_a2b_price, { pairName, pairFullName, poolId: pool });
+      .record(coin_a2b_price, {
+        pairName,
+        pairFullName,
+        poolId: pool,
+        token_symbol: poolInfo.symbol_a,
+        token_address: poolInfo.type_a,
+      });
     ctx.meter
       .Gauge("b2a_price")
-      .record(coin_b2a_price, { pairName, pairFullName, poolId: pool });
+      .record(coin_b2a_price, {
+        pairName,
+        pairFullName,
+        poolId: pool,
+        token_symbol: poolInfo.symbol_b,
+        token_address: poolInfo.type_b,
+      });
   } catch (e) {
     console.log(
       `get pool price error ${
@@ -520,68 +559,68 @@ export async function calculateTokenValue_USD(
     ctx.meter.Gauge("TVL_by_Token_USD").record(value_a, {
       pairName,
       pairFullName,
-      name: name_a,
-      symbol: poolInfo.symbol_a,
-      type: poolInfo.type_a,
+      token_name: name_a,
+      token_symbol: poolInfo.symbol_a,
+      token_address: poolInfo.type_a,
       poolId: pool,
     });
     ctx.meter.Gauge("TVL_by_Token_USD").record(value_b, {
       pairName,
       pairFullName,
-      name: name_b,
-      symbol: poolInfo.symbol_b,
-      type: poolInfo.type_b,
+      token_name: name_b,
+      token_symbol: poolInfo.symbol_b,
+      token_address: poolInfo.type_b,
       poolId: pool,
     });
 
     ctx.meter.Counter("TVL_by_Token_USD_Counter").add(value_b!, {
       pairName,
       pairFullName,
-      name: name_b,
-      symbol: poolInfo.symbol_b,
-      type: poolInfo.type_b,
+      token_name: name_b,
+      token_symbol: poolInfo.symbol_b,
+      token_address: poolInfo.type_b,
       poolId: pool,
     });
     ctx.meter.Counter("TVL_by_Token_USD_Counter").add(value_a!, {
       pairName,
       pairFullName,
-      name: name_a,
-      symbol: poolInfo.symbol_a,
-      type: poolInfo.type_a,
+      token_name: name_a,
+      token_symbol: poolInfo.symbol_a,
+      token_address: poolInfo.type_a,
       poolId: pool,
     });
 
     ctx.meter.Gauge("TVL_by_Token").record(amount_a, {
       pairName,
       pairFullName,
-      name: name_a,
-      symbol: poolInfo.symbol_a,
-      type: poolInfo.type_a,
+      token_name: name_a,
+      token_symbol: poolInfo.symbol_a,
+      token_address: poolInfo.type_a,
       poolId: pool,
     });
     ctx.meter.Gauge("TVL_by_Token").record(amount_b, {
       pairName,
       pairFullName,
-      name: name_b,
-      symbol: poolInfo.symbol_b,
-      type: poolInfo.type_b,
+      token_name: name_b,
+      token_symbol: poolInfo.symbol_b,
+      token_address: poolInfo.type_b,
       poolId: pool,
     });
 
     ctx.meter.Counter("TVL_by_Token_Counter").add(amount_a!, {
       pairName,
       pairFullName,
-      name: name_a,
-      symbol: poolInfo.symbol_a,
-      type: poolInfo.type_a,
+      token_name: name_a,
+      token_symbol: poolInfo.symbol_a,
+      token_address: poolInfo.type_a,
       poolId: pool,
     });
     ctx.meter.Counter("TVL_by_Token_Counter").add(amount_b!, {
       pairName,
       pairFullName,
-      name: name_b,
-      symbol: poolInfo.symbol_b,
-      type: poolInfo.type_b,
+      token_name: name_b,
+      token_symbol: poolInfo.symbol_b,
+      token_address: poolInfo.type_b,
       poolId: pool,
     });
   } catch (e) {
