@@ -1,4 +1,5 @@
 project: turbos/turbos_testnet
+debug: true
 contracts:
   - chain: sui_testnet
     address: "0xfea145c1608cd5366ffcf278c0124d9f416b30e33a6a47ee12c615420ee0224c"

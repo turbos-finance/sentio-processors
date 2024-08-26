@@ -1,23 +1,24 @@
 import {
-  SuiObjectProcessor,
-  SuiContext,
-  SuiObjectContext,
   SuiObjectProcessorTemplate,
 } from "@sentio/sdk/sui";
-import * as constant from "./constant-turbos.js";
-import { SuiNetwork } from "@sentio/sdk/sui";
 import * as helper from "./helper/turbos-clmm-helper.js";
 import { Gauge, BigDecimal } from "@sentio/sdk";
-
-import { pool, pool_factory, position_manager } from "./types/sui/turbos.js";
-import {
-  getCurrentTickStatus,
-  MAX_TICK_INDEX,
-  MIN_TICK_INDEX,
-} from "./helper/turbos-clmm-helper.js";
 import { getPriceByType } from "@sentio/sdk/utils";
-const address = constant.CLMM_MAINNET;
-const network = SuiNetwork.MAIN_NET;
+import { address, network, skipStartBlockValidation, startCheckPoint, turbos } from "./helper/config.js";
+import { GLOBAL_CONFIG } from '@sentio/runtime'
+
+GLOBAL_CONFIG.execution = {
+  skipStartBlockValidation: skipStartBlockValidation,
+}
+
+const { pool, pool_factory, position_manager } = turbos;
+
+type mutated = {
+  reference: {
+    objectId: string;
+    version: string
+  }
+}[]
 
 export const volRewardOptions = {
   sparse: true,
@@ -39,7 +40,7 @@ pool_factory
   .bind({
     address,
     network,
-    startCheckpoint: 1500000n,
+    startCheckpoint: startCheckPoint,
   })
   .onEventPoolCreatedEvent(
     async (event, ctx) => {
@@ -69,7 +70,7 @@ pool_factory
         pairFullName: poolInfo.pairFullName,
       });
 
-      const mutated = ctx.transaction.effects?.mutated;
+      const mutated = ctx.transaction.effects?.mutated as mutated;
       const obj = mutated?.find((item) => item.reference.objectId === pool);
 
       await helper.getOrCreatePool(ctx, pool, obj?.reference.version);
@@ -88,15 +89,16 @@ pool
   .bind({
     address,
     network,
-    startCheckpoint: 1500000n,
+    startCheckpoint: startCheckPoint,
   })
   .onEventSwapEvent(
     async (event, ctx) => {
       ctx.meter.Counter("swap_counter").add(1);
+      // @ts-ignore
       const sender = event.sender;
       const pool = event.data_decoded.pool;
 
-      const mutated = ctx.transaction.effects?.mutated;
+      const mutated = ctx.transaction.effects?.mutated as mutated;
       const obj = mutated?.find((item) => item.reference.objectId === pool);
 
       const recipient = event.data_decoded.recipient;
@@ -227,7 +229,7 @@ pool
       ctx.meter.Counter("add_liquidity_counter").add(1);
       const pool = event.data_decoded.pool;
 
-      const mutated = ctx.transaction.effects?.mutated;
+      const mutated = ctx.transaction.effects?.mutated  as mutated;
       const obj = mutated?.find((item) => item.reference.objectId === pool);
 
       const poolInfo = await helper.getOrCreatePool(ctx, pool);
@@ -237,6 +239,7 @@ pool
       const decimal_a = poolInfo.decimal_a;
       const decimal_b = poolInfo.decimal_b;
 
+      // @ts-ignore
       const sender = event.sender;
       const owner = event.data_decoded.owner;
       const tick_lower_index = Number(event.data_decoded.tick_lower_index.bits);
@@ -291,7 +294,7 @@ pool
       ctx.meter.Counter("remove_liquidity_counter").add(1);
       const pool = event.data_decoded.pool;
 
-      const mutated = ctx.transaction.effects?.mutated;
+      const mutated = ctx.transaction.effects?.mutated as mutated;
       const obj = mutated?.find((item) => item.reference.objectId === pool);
 
       const poolInfo = await helper.getOrCreatePool(ctx, pool);
@@ -299,7 +302,7 @@ pool
       const pairFullName = poolInfo.pairFullName;
       const decimal_a = poolInfo.decimal_a;
       const decimal_b = poolInfo.decimal_b;
-
+      // @ts-ignore
       const sender = event.sender;
       const owner = event.data_decoded.owner;
       const tick_lower_index = Number(event.data_decoded.tick_lower_index.bits);
@@ -363,6 +366,7 @@ pool
     const reward_index = event.data_decoded.reward_index;
     const reward_manager = event.data_decoded.reward_manager;
     const reward_vault = event.data_decoded.reward_vault;
+    // @ts-ignore
     const sender = event.sender;
 
     const { type, symbol, decimals } = await helper.setOrGetCoinType(
@@ -406,20 +410,20 @@ position_manager
   .bind({
     address,
     network,
-    startCheckpoint: 1500000n,
+    startCheckpoint: startCheckPoint,
   })
   .onEventCollectEvent(
     async (event, ctx) => {
       ctx.meter.Counter("collect_fee").add(1);
       const pool = event.data_decoded.pool;
 
-      const mutated = ctx.transaction.effects?.mutated;
+      const mutated = ctx.transaction.effects?.mutated as mutated;
       const obj = mutated?.find((item) => item.reference.objectId === pool);
 
       const amount_a = event.data_decoded.amount_a;
       const amount_b = event.data_decoded.amount_b;
       const recipientAddress = event.data_decoded.recipient;
-
+      // @ts-ignore
       const sender = event.sender;
 
       const poolInfo = await helper.getOrCreatePool(ctx, pool);
@@ -466,6 +470,7 @@ position_manager
     const reward_index = event.data_decoded.reward_index;
     const recipientAddress = event.data_decoded.recipient;
     const vault = event.data_decoded.vault;
+    // @ts-ignore
     const sender = event.sender;
 
     const vaultCoin = await helper.setOrGetCoinType(ctx, vault);
@@ -506,7 +511,7 @@ position_manager
 const template = new SuiObjectProcessorTemplate().onTimeInterval(
   async (self, _, ctx) => {
     // When the pool is broken through, it is not recorded
-    if (await getCurrentTickStatus(ctx, ctx.objectId)) {
+    if (await helper.getCurrentTickStatus(ctx, ctx.objectId)) {
       return;
     }
 

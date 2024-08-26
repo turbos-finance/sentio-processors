@@ -1,0 +1,6 @@
+project: turbos/turbos_devnet
+debug: true
+contracts:
+  - chain: sui_testnet
+    address: "0x6f4a0e942e8f94a1a5d1206ff94c47557b23e1ce53de07bc3c8015b01200b405"
+    name: turbos
