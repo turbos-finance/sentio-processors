@@ -8,8 +8,14 @@ import * as constant from "./constant-turbos.js";
 import { SuiNetwork } from "@sentio/sdk/sui";
 import * as helper from "./helper/turbos-clmm-helper.js";
 import { Gauge, BigDecimal } from "@sentio/sdk";
+import BN from "bn.js";
 
-import { pool, pool_factory, position_manager } from "./types/sui/turbos.js";
+import {
+  pool,
+  pool_factory,
+  position_manager,
+  reward_manager,
+} from "./types/sui/turbos.js";
 import {
   getCurrentTickStatus,
   MAX_TICK_INDEX,
@@ -27,6 +33,10 @@ export const volRewardOptions = {
   },
 };
 const day_reward_amount = Gauge.register("day_reward_amount", volRewardOptions);
+const day_reward_amount_usd = Gauge.register(
+  "day_reward_amount_usd",
+  volRewardOptions
+);
 
 export const volOptions = {
   sparse: true,
@@ -60,13 +70,27 @@ pool_factory
         pool,
         tick_spacing,
         fee,
+        fee_rate: Number(fee) / 1000000,
         sqrt_price,
+
+        token_0_index: 0,
+        token_1_index: 1,
+        token_0_symbol: poolInfo.symbol_a,
+        token_1_symbol: poolInfo.symbol_b,
+        token_0_address: poolInfo.type_a.toLocaleLowerCase(),
+        token_1_address: poolInfo.type_b.toLocaleLowerCase(),
+
+        token_a_index: 0,
+        token_b_index: 1,
         token_a_symbol: poolInfo.symbol_a,
         token_b_symbol: poolInfo.symbol_b,
         token_a_address: poolInfo.type_a,
         token_b_address: poolInfo.type_b,
+
         pairName: poolInfo.pairName,
         pairFullName: poolInfo.pairFullName,
+        blocknumber: ctx.transaction.checkpoint,
+        checkpoint: ctx.transaction.checkpoint,
       });
 
       const mutated = ctx.transaction.effects?.mutated;
@@ -114,8 +138,8 @@ pool
       const fee_amount = Number(event.data_decoded.fee_amount);
       const is_exact_in = event.data_decoded.is_exact_in;
 
-      const type_a = poolInfo.type_a;
-      const type_b = poolInfo.type_b;
+      const type_a = poolInfo.type_a.toLocaleLowerCase();
+      const type_b = poolInfo.type_b.toLocaleLowerCase();
       const symbol_a = poolInfo.symbol_a;
       const symbol_b = poolInfo.symbol_b;
       const decimal_a = poolInfo.decimal_a;
@@ -149,7 +173,9 @@ pool
         }
       }
 
-      ctx.meter.Gauge("Fee").record(fee_usd, { pairName, pairFullName });
+      ctx.meter
+        .Gauge("Fee")
+        .record(fee_usd, { pairName, pairFullName, poolId: pool });
       ctx.meter
         .Counter("Cumulative_Fee_Counter")
         .add(fee_usd!, { pairName, pairFullName, poolId: pool });
@@ -157,12 +183,26 @@ pool
       ctx.eventLogger.emit("SwapEvent", {
         distinctId: sender,
         digest: ctx.transaction.digest,
+        blocknumber: ctx.transaction.checkpoint,
         checkpoint: ctx.transaction.checkpoint,
         recipient,
         pool,
         sqrt_price,
+
+        token_0_index: 0,
+        token_1_index: 1,
+        token_0_symbol: symbol_a,
+        token_1_symbol: symbol_b,
+        token_0_address: type_a,
+        token_1_address: type_b,
+
+        token_a_index: 0,
+        token_b_index: 1,
+        token_a_symbol: symbol_a,
+        token_b_symbol: symbol_b,
         token_a_address: type_a,
         token_b_address: type_b,
+
         amount_a,
         amount_b,
         price_a,
@@ -176,11 +216,11 @@ pool
         is_exact_in,
         fee_amount,
         fee_usd,
-        token_a_symbol: symbol_a,
-        token_b_symbol: symbol_b,
         coin_symbol: atob ? symbol_a : symbol_b, //for amount_in
         pairName,
         pairFullName,
+        input_token_address: atob ? type_a : type_b,
+        output_token_address: atob ? type_b : type_a,
         message: `Swap ${atob ? amount_a : amount_b} ${
           atob ? symbol_a : symbol_b
         } to ${atob ? amount_b : amount_a} ${
@@ -194,10 +234,13 @@ pool
       ctx.meter
         .Counter("Swap_Volume_USD_Counter")
         .add(usd_volume!, { pairName, pairFullName, poolId: pool });
+
       if (price_a) {
         price_a_gauge.record(ctx, price_a, {
           pairName,
           pairFullName,
+          token_0_address: type_a,
+          token_0_symbol: symbol_a,
           token_address: type_a,
           token_symbol: symbol_a,
           poolId: pool,
@@ -207,8 +250,13 @@ pool
         price_b_gauge.record(ctx, price_b, {
           pairName,
           pairFullName,
+
+          token_0_address: type_a,
+          token_0_symbol: symbol_a,
+
           token_address: type_b,
           token_symbol: symbol_b,
+
           poolId: pool,
         });
       }
@@ -265,12 +313,25 @@ pool
         amount_a,
         amount_b,
         value,
+
+        token_0_index: 0,
+        token_1_index: 1,
+        token_0_symbol: poolInfo.symbol_a,
+        token_1_symbol: poolInfo.symbol_b,
+        token_0_address: poolInfo.type_a.toLocaleLowerCase(),
+        token_1_address: poolInfo.type_b.toLocaleLowerCase(),
+
+        token_a_index: 0,
+        token_b_index: 1,
         token_a_symbol: poolInfo.symbol_a,
         token_b_symbol: poolInfo.symbol_b,
-        token_a_address: poolInfo.type_a,
-        token_b_address: poolInfo.type_b,
+        token_a_address: poolInfo.type_a.toLocaleLowerCase(),
+        token_b_address: poolInfo.type_b.toLocaleLowerCase(),
+
         pairName,
         pairFullName,
+        blocknumber: ctx.transaction.checkpoint,
+        checkpoint: ctx.transaction.checkpoint,
         message: `Add USD$${value} Liquidity in ${pairFullName}`,
       });
       ctx.meter
@@ -328,13 +389,26 @@ pool
         liquidity_delta,
         amount_a,
         amount_b,
+
+        token_0_index: 0,
+        token_1_index: 1,
+        token_0_symbol: poolInfo.symbol_a,
+        token_1_symbol: poolInfo.symbol_b,
+        token_0_address: poolInfo.type_a.toLocaleLowerCase(),
+        token_1_address: poolInfo.type_b.toLocaleLowerCase(),
+
+        token_a_index: 0,
+        token_b_index: 1,
         token_a_symbol: poolInfo.symbol_a,
         token_b_symbol: poolInfo.symbol_b,
-        token_a_address: poolInfo.type_a,
-        token_b_address: poolInfo.type_b,
+        token_a_address: poolInfo.type_a.toLocaleLowerCase(),
+        token_b_address: poolInfo.type_b.toLocaleLowerCase(),
+
         value,
         pairName,
         pairFullName,
+        blocknumber: ctx.transaction.checkpoint,
+        checkpoint: ctx.transaction.checkpoint,
         message: `Remove USD$${value} Liquidity in ${pairFullName}`,
       });
       ctx.meter
@@ -380,8 +454,26 @@ pool
     day_reward_amount.record(ctx, dayAmount, {
       pairName,
       pairFullName,
-      type,
-      symbol,
+
+      token_0_address: type.toLocaleLowerCase(),
+      token_0_symbol: symbol,
+
+      token_address: type.toLocaleLowerCase(),
+      token_symbol: symbol,
+      poolId: pool,
+    });
+
+    const price = await helper.tryCatchGetPrice(type, ctx.timestamp);
+    const dayAmount_usd = dayAmount * (price ? price : 0);
+    day_reward_amount_usd.record(ctx, dayAmount_usd, {
+      pairName,
+      pairFullName,
+
+      token_0_address: type.toLocaleLowerCase(),
+      token_0_symbol: symbol,
+
+      token_address: type.toLocaleLowerCase(),
+      token_symbol: symbol,
       poolId: pool,
     });
 
@@ -394,10 +486,12 @@ pool
       reward_index,
       reward_manager,
       reward_vault,
-      reward_token_address: type,
+      reward_token_address: type.toLocaleLowerCase(),
       reward_token_symbol: symbol,
       reward_token_decimals: decimals,
       reward_token_day_amount: dayAmount,
+      blocknumber: ctx.transaction.checkpoint,
+      checkpoint: ctx.transaction.checkpoint,
       message: `Update Reward Emissions in ${pairFullName}`,
     });
   });
@@ -446,14 +540,27 @@ position_manager
         pairFullName,
         amount_a: _amount_a,
         amount_a_usd: value_a,
+
+        token_0_index: 0,
+        token_1_index: 1,
+        token_0_symbol: poolInfo.symbol_a,
+        token_1_symbol: poolInfo.symbol_b,
+        token_0_address: poolInfo.type_a.toLocaleLowerCase(),
+        token_1_address: poolInfo.type_b.toLocaleLowerCase(),
+
+        token_a_index: 0,
+        token_b_index: 1,
         token_a_symbol: poolInfo.symbol_a,
-        token_a_address: poolInfo.type_a,
+        token_b_symbol: poolInfo.symbol_b,
+        token_a_address: poolInfo.type_a.toLocaleLowerCase(),
+        token_b_address: poolInfo.type_b.toLocaleLowerCase(),
+
         amount_b: _amount_b,
         amount_b_usd: value_b,
-        token_b_symbol: poolInfo.symbol_b,
-        token_b_address: poolInfo.type_b,
         amount_usd: value_a + value_b,
         recipientAddress,
+        blocknumber: ctx.transaction.checkpoint,
+        checkpoint: ctx.transaction.checkpoint,
         message: `collect ${_amount_a} ${poolInfo.symbol_a} and  ${_amount_b} ${poolInfo.symbol_b} fee`,
       });
     },
@@ -489,8 +596,17 @@ position_manager
       reward_index,
       recipientAddress,
       vault,
+
+      token_index: 0,
       token_symbol: vaultCoin.symbol,
-      token_address: vaultCoin.type,
+      token_address: vaultCoin.type.toLocaleLowerCase(),
+
+      token_0_index: 0,
+      token_0_symbol: vaultCoin.symbol,
+      token_0_address: vaultCoin.type.toLocaleLowerCase(),
+
+      blocknumber: ctx.transaction.checkpoint,
+      checkpoint: ctx.transaction.checkpoint,
       message: `collect ${_amount} ${vaultCoin.symbol} reward`,
     });
   });
@@ -539,7 +655,13 @@ const template = new SuiObjectProcessorTemplate().onTimeInterval(
         if (coin_a_balance) {
           ctx.meter.Gauge("coin_a_balance").record(coin_a_balance, {
             token_symbol: symbol_a,
-            token_address: poolInfo.type_a,
+            token_address: poolInfo.type_a.toLocaleLowerCase(),
+            token_index: "0",
+
+            token_0_symbol: symbol_a,
+            token_0_address: poolInfo.type_a.toLocaleLowerCase(),
+            token_0_index: "0",
+
             pairName,
             pairFullName,
             poolId: ctx.objectId,
@@ -549,7 +671,13 @@ const template = new SuiObjectProcessorTemplate().onTimeInterval(
         if (coin_b_balance) {
           ctx.meter.Gauge("coin_b_balance").record(coin_b_balance, {
             token_symbol: symbol_b,
-            token_address: poolInfo.type_b,
+            token_address: poolInfo.type_b.toLocaleLowerCase(),
+            token_index: "1",
+
+            token_0_symbol: symbol_b,
+            token_0_address: poolInfo.type_b.toLocaleLowerCase(),
+            token_0_index: "1",
+
             pairName,
             pairFullName,
             poolId: ctx.objectId,
@@ -575,16 +703,28 @@ const template = new SuiObjectProcessorTemplate().onTimeInterval(
             pairName,
             pairFullName,
             bridge: coin_a_bridge,
-            token_address: coin_a_address,
+            token_address: coin_a_address.toLocaleLowerCase(),
             token_symbol: symbol_a,
+            token_index: "0",
+
+            token_0_address: coin_a_address.toLocaleLowerCase(),
+            token_0_symbol: symbol_a,
+            token_0_index: "0",
+
             poolId: ctx.objectId,
           });
           ctx.meter.Gauge("TVL_by_Pool_Token_USD").record(0, {
             pairName,
             pairFullName,
             bridge: coin_b_bridge,
-            token_address: coin_b_address,
+            token_address: coin_b_address.toLocaleLowerCase(),
             token_symbol: symbol_b,
+            token_index: "1",
+
+            token_0_address: coin_b_address.toLocaleLowerCase(),
+            token_0_symbol: symbol_b,
+            token_0_index: "1",
+
             poolId: ctx.objectId,
           });
         } else {
@@ -604,22 +744,77 @@ const template = new SuiObjectProcessorTemplate().onTimeInterval(
             pairName,
             pairFullName,
             bridge: coin_a_bridge,
-            token_address: coin_a_address,
+            token_address: coin_a_address.toLocaleLowerCase(),
             token_symbol: symbol_a,
+            token_index: "0",
+
+            token_0_address: coin_a_address.toLocaleLowerCase(),
+            token_0_symbol: symbol_a,
+            token_0_index: "0",
+
             poolId: ctx.objectId,
           });
           ctx.meter.Gauge("TVL_by_Pool_Token_USD").record(tvl_b, {
             pairName,
             pairFullName,
             bridge: coin_b_bridge,
-            token_address: coin_b_address,
+
+            token_address: coin_b_address.toLocaleLowerCase(),
+            token_index: "1",
             token_symbol: symbol_b,
+
+            token_0_address: coin_b_address.toLocaleLowerCase(),
+            token_0_index: "1",
+            token_0_symbol: symbol_b,
+
             poolId: ctx.objectId,
           });
 
           console.log(
             `pair: ${pairFullName} \nsymbol:${symbol_a} ${symbol_b}, \ncoin_a_balance ${coin_a_balance} coin_b_balance ${coin_b_balance}, \npool ${ctx.objectId} \nliquidity: ${liquidity} \ntvl: ${tvl} `
           );
+        }
+
+        for (let i = 0; i < poolInfo.rewards.length; i++) {
+          const reward = poolInfo.rewards[i];
+          if (
+            reward.fields.emissions_per_second &&
+            reward.fields.emissions_per_second !== "0"
+          ) {
+            const { type, symbol, decimals } = await helper.setOrGetCoinType(
+              ctx,
+              reward.fields.vault
+            );
+
+            const dayAmount = new BigDecimal(86400)
+              .multipliedBy(
+                new BN(reward.fields.emissions_per_second).shrn(64).toString()
+              )
+              .dividedBy(10 ** decimals)
+              .toNumber();
+            const price = await helper.tryCatchGetPrice(type, ctx.timestamp);
+            const dayAmount_usd = dayAmount * (price || 0);
+
+            ctx.meter.Gauge("pool_incentive_amount").record(dayAmount, {
+              pairName,
+              pairFullName,
+              poolId: ctx.objectId,
+              vault: reward.fields.vault,
+              reward_token_address: type.toLocaleLowerCase(),
+              reward_token_symbol: symbol,
+              reward_token_decimals: decimals.toString(),
+            });
+
+            ctx.meter.Gauge("pool_incentive_usd").record(dayAmount_usd, {
+              pairName,
+              pairFullName,
+              poolId: ctx.objectId,
+              vault: reward.fields.vault,
+              reward_token_address: type.toLocaleLowerCase(),
+              reward_token_symbol: symbol,
+              reward_token_decimals: decimals.toString(),
+            });
+          }
         }
       } catch (e) {
         console.log(`SuiObjectProcessorTemplate: ${e.message}`);
