@@ -1,23 +1,17 @@
 import {
-  SuiObjectProcessor,
-  SuiContext,
-  SuiObjectContext,
   SuiObjectProcessorTemplate,
 } from "@sentio/sdk/sui";
-import * as constant from "./constant-turbos.js";
-import { SuiNetwork } from "@sentio/sdk/sui";
 import * as helper from "./helper/turbos-clmm-helper.js";
 import { Gauge, BigDecimal } from "@sentio/sdk";
-
-import { pool, pool_factory, position_manager } from "./types/sui/turbos.js";
-import {
-  getCurrentTickStatus,
-  MAX_TICK_INDEX,
-  MIN_TICK_INDEX,
-} from "./helper/turbos-clmm-helper.js";
 import { getPriceByType } from "@sentio/sdk/utils";
-const address = constant.CLMM_MAINNET;
-const network = SuiNetwork.MAIN_NET;
+import { address, network, skipStartBlockValidation, startCheckPoint, turbos } from "./helper/config.js";
+import { GLOBAL_CONFIG } from '@sentio/runtime'
+
+GLOBAL_CONFIG.execution = {
+  skipStartBlockValidation: skipStartBlockValidation,
+}
+
+const { pool, pool_factory, position_manager } = turbos;
 
 export const volRewardOptions = {
   sparse: true,
@@ -39,7 +33,7 @@ pool_factory
   .bind({
     address,
     network,
-    startCheckpoint: 1500000n,
+    startCheckpoint: startCheckPoint,
   })
   .onEventPoolCreatedEvent(
     async (event, ctx) => {
@@ -88,7 +82,7 @@ pool
   .bind({
     address,
     network,
-    startCheckpoint: 1500000n,
+    startCheckpoint: startCheckPoint,
   })
   .onEventSwapEvent(
     async (event, ctx) => {
@@ -406,7 +400,7 @@ position_manager
   .bind({
     address,
     network,
-    startCheckpoint: 1500000n,
+    startCheckpoint: startCheckPoint,
   })
   .onEventCollectEvent(
     async (event, ctx) => {
@@ -506,7 +500,7 @@ position_manager
 const template = new SuiObjectProcessorTemplate().onTimeInterval(
   async (self, _, ctx) => {
     // When the pool is broken through, it is not recorded
-    if (await getCurrentTickStatus(ctx, ctx.objectId)) {
+    if (await helper.getCurrentTickStatus(ctx, ctx.objectId)) {
       return;
     }
 

@@ -1,5 +1,5 @@
 {
-  "name": "turbos-testnet",
+  "name": "turbos-deepbook-testnet",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -7,13 +7,10 @@
     "test": "sentio test",
     "gen": "sentio gen",
     "build": "sentio build",
-    "upload": "sh scripts/upload.sh"
+    "postinstall": "node scripts/patch-deepbook-v3.mjs",
+    "upload": "yarn install && sh scripts/upload.sh"
   },
   "dependencies": {
-    "axios": "^1.6.4",
-    "lru-cache": "^7"
-  },
-  "devDependencies": {
-    "@types/lru-cache": "^7.10.10"
+    "@mysten/deepbook-v3": "*"
   }
 }
