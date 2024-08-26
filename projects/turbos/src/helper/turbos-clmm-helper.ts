@@ -1,14 +1,11 @@
-// @ts-nocheck
 import {
-  SuiObjectProcessor,
   SuiContext,
   SuiObjectContext,
 } from "@sentio/sdk/sui";
 import { getPriceByType, token } from "@sentio/sdk/utils";
-import * as constant from "../constant-turbos.js";
-import { SuiNetwork } from "@sentio/sdk/sui";
+import LRUCache from "lru-cache";
 import axios from "axios";
-import { LRUCache } from "lru-cache";
+import { network, turbosApiHost } from "./config.js";
 
 export const MAX_TICK_INDEX = 443636;
 export const MIN_TICK_INDEX = -443636;
@@ -48,61 +45,89 @@ export function getBridgeInfo(address: string) {
 
 //get coin address without suffix
 export function getCoinObjectAddress(type: string) {
-  let coin_a_address = "";
-  let coin_b_address = "";
-  const regex = /0x[a-fA-F0-9]+:/g;
-  const matches = type.match(regex);
-  if (matches && matches.length >= 2) {
-    coin_a_address = matches[1].slice(0, -1);
-    coin_b_address = matches[2].slice(0, -1);
-  }
-  return [coin_a_address, coin_b_address];
+  return getCoinFullAddress(type).map((coin) => coin.split(':')[0]);
 }
 
 //get full coin address with suffix
 export function getCoinFullAddress(type: string) {
-  let coin_a_address = "";
-  let coin_b_address = "";
-  const regex_a = /<[^,]+,/g;
-  const regex_b = /, [^\s>]+,/g;
-  const matches_a = type.match(regex_a);
-  const matches_b = type.match(regex_b);
-  if (matches_a) {
-    coin_a_address = matches_a[0].slice(1, -1);
-  }
-  if (matches_b) {
-    coin_b_address = matches_b[0].slice(2, -1);
-  }
-  return [coin_a_address, coin_b_address];
+  const types = type.replace('>', '').split('<')[1]?.split(/,\s*/);
+  return [types.pop()!, types.pop()!].reverse();
 }
 
-// cache object
-// pool 1min cache
 const poolCache = new LRUCache({
-  // max: 2000,
-  // maxSize: 5000,
-  ttl: 1000 * 60 * 1,
+  max: 10000,
+  ttl: 1000 * 60 * 1/* 1 minute */,
 });
+
+interface PoolObject {
+  data: { 
+    type: string
+    content: {
+      fields: {
+        coin_a: string;
+        coin_b: string;
+        deploy_time_ms: string;
+        fee: number;
+        fee_growth_global_a: string;
+        fee_growth_global_b: string;
+        fee_protocol: number;
+        id: { id: string };
+        liquidity: string;
+        max_liquidity_per_tick: string;
+        protocol_fees_a: string;
+        protocol_fees_b: string;
+        reward_infos: {
+          type: string;
+          fields: {
+            emissions_per_second: string;
+            growth_global: string;
+            id: {
+              id: string;
+            };
+            manager: string;
+            vault: string;
+            vault_coin_type: string;
+          };
+        }[];
+        reward_last_updated_time_ms: string;
+        sqrt_price: string;
+        tick_current_index: {
+          type: string;
+          fields: { bits: number };
+        };
+        tick_map: {
+          type: string;
+          fields: {
+            id: { id: string };
+            size: string;
+          };
+        };
+        tick_spacing: number;
+        unlocked: boolean;
+      };
+    }
+  }
+}
 
 export async function setOrGetPoolObject(
   ctx: SuiContext | SuiObjectContext,
   pool: string,
   version?: string
-) {
-  let poolInfo = poolCache.get(`${pool}${version || ""}`);
+):Promise<PoolObject> {
+  const key = `${pool}${version || ""}`;
+  let poolInfo = poolCache.get(key) as any;
 
   if (!poolInfo) {
     poolInfo = getPoolObject(ctx, pool, version);
-
-    poolInfo.catch((e) => {
+    poolInfo.catch(() => {
       setTimeout(() => {
-        if (poolCache.get(`${pool}${version || ""}`) === poolInfo) {
-          poolCache.delete(`${pool}${version || ""}`);
+        if (poolCache.get(key) === poolInfo) {
+          poolCache.delete(key);
         }
       }, 1000);
     });
 
-    poolCache.set(`${pool}${version || ""}`, poolInfo);
+    poolCache.set(key, poolInfo);
     console.log("set pool object for: " + pool + ", version: " + version);
   }
   return await poolInfo;
@@ -234,17 +259,14 @@ export async function buildPoolInfo(
     type,
     fee_label,
     current_tick,
-  ] = ["", "", "", "", 0, 0, "", "", "", "", "", ""];
+  ] = ["", "", "", "", "", "", 0, 0, "", "", "", "", 0];
   let obj;
   try {
-    // @ts-ignore
     obj = await setOrGetPoolObject(ctx, pool, version);
     console.log(
       `buildPoolInfo ${pool}, getObject value:  ${obj}, ${JSON.stringify(obj)}`
     );
-    // @ts-ignore
     type = obj!.data.type;
-    // @ts-ignore
     if (obj!.data.content.fields.fee) {
       fee_label =
         (Number(obj!.data.content.fields.fee) / 10000).toFixed(2) + "%";
@@ -331,9 +353,9 @@ export async function getPoolPrice(
   version?: string
 ) {
   let coin_a2b_price = 0;
+  let obj: PoolObject | undefined;
   try {
-    // @ts-ignore
-    let obj = await setOrGetPoolObject(ctx, pool, version);
+    obj = await setOrGetPoolObject(ctx, pool, version);
     const sqrt_price = Number(obj!.data.content.fields.sqrt_price);
     if (!sqrt_price) {
       console.log(`get pool price error at ${ctx}`);
@@ -469,7 +491,6 @@ export async function calculateSwapVol_USD(
 //   };
 //   let obj;
 //   try {
-//     // @ts-ignore
 //     obj = await ctx.client.getObject({
 //       id: objectId,
 //       options: { showType: true, showContent: true },
@@ -510,7 +531,6 @@ export async function calculateTokenValue_USD(
     return;
   }
   try {
-    // @ts-ignore
     let obj = await setOrGetPoolObject(ctx, pool, version);
     const coin_a = Number(obj!.data.content.fields.coin_a || 0);
     const coin_b = Number(obj!.data.content.fields.coin_b || 0);
@@ -638,9 +658,8 @@ export async function getCurrentTickStatus(
   pool: string,
   version?: string
 ) {
-  let current_tick = "";
-  // @ts-ignore
-  let obj;
+  let current_tick: number | undefined;
+  let obj: PoolObject | undefined;
   try {
     obj = await setOrGetPoolObject(ctx, pool, version);
   } catch (err) {
@@ -675,7 +694,7 @@ export async function getTurbosPool(pool: string) {
 
   let value = cachePool.get(key);
   if (!value) {
-    let promise = axios.get(`https://api.turbos.finance/pools/ids?ids=${pool}`);
+    let promise = axios.get(`${turbosApiHost}/pools/ids?ids=${pool}`);
     value = {
       promise,
       updateTime: nowSec,
@@ -734,11 +753,11 @@ export async function getVaultCoinType(
     decimals: 9,
   };
   try {
-    // @ts-ignore
     const obj = await ctx.client.getObject({
       id: objectId,
       options: { showType: true, showContent: true },
     });
+    // @ts-expect-error
     const type = obj!.data.content.type;
     const typeArray = type.match(/\<([^)]*)\>/);
     const coinType = typeArray[1];
@@ -760,7 +779,7 @@ export async function getVaultCoinType(
 
 async function tryCatchGetPrice(coin_address: string, date: Date) {
   try {
-    const price = await getPriceByType(SuiNetwork.MAIN_NET, coin_address, date);
+    const price = await getPriceByType(network, coin_address, date);
     return price;
   } catch (e) {}
   return;

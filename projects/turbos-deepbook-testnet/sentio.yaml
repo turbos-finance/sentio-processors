@@ -1,0 +1,6 @@
+project: turbos/turbos_deepbook_testnet
+debug: false
+contracts:
+  - chain: sui_testnet
+    address: "0x48cc688a15bdda6017c730a3c65b30414e642d041f2931ef14e08f6b0b2a1b7f"
+    name: deepbook

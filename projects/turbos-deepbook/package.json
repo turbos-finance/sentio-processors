@@ -1,0 +1,16 @@
+{
+  "name": "turbos-deepbook",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "sentio test",
+    "gen": "sentio gen",
+    "build": "sentio build",    
+    "postinstall": "node scripts/patch-deepbook-v3.mjs",
+    "upload": "yarn install && sentio upload"
+  },
+  "dependencies": {
+    "@mysten/deepbook-v3": "0.6.0"
+  }
+}
