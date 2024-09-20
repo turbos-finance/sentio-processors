@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@sentio/sdk": "^2.31.0",
-    "axios": "^1.6.4"
+    "axios": "^1.6.4",
+    "lru-cache": "^11.0.1",
+    "turbos-clmm-sdk": "^3.1.2"
   },
   "devDependencies": {
     "@sentio/cli": "^2.12.1",

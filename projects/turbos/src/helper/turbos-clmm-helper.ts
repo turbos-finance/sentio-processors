@@ -9,6 +9,7 @@ import * as constant from "../constant-turbos.js";
 import { SuiNetwork } from "@sentio/sdk/sui";
 import axios from "axios";
 import { LRUCache } from "lru-cache";
+import { Decimal } from "turbos-clmm-sdk";
 
 export const MAX_TICK_INDEX = 443636;
 export const MIN_TICK_INDEX = -443636;
@@ -421,20 +422,17 @@ export async function calculateValue_USD(
     );
     const price_a = await tryCatchGetPrice(coin_a_full_address, date);
     const price_b = await tryCatchGetPrice(coin_b_full_address, date);
+
     console.log(`sentio sdk price_a ${price_a}, price_b ${price_b}`);
+
     const coin_a2b_price = await getPoolPrice(ctx, pool, version);
 
-    if (price_a) {
-      value_a = amount_a * price_a;
-      //handle the case of low liquidity
-      if (price_b) {
-        value_b = amount_b * price_b;
-      } else {
-        value_b = (amount_b / coin_a2b_price) * price_a;
-      }
-    } else if (price_b) {
-      value_a = amount_a * coin_a2b_price * price_b;
+    if (price_b) {
       value_b = amount_b * price_b;
+      value_a = amount_a * coin_a2b_price * price_b;
+    } else if (price_a) {
+      value_a = amount_a * price_a;
+      value_b = (amount_b / coin_a2b_price) * price_a;
     } else {
       console.log(
         `price not in sui coinlist, calculate value failed at coin_a: ${coin_a_full_address},coin_b: ${coin_b_full_address}}`
@@ -464,14 +462,13 @@ export async function calculateSwapVol_USD(
     price_a = await tryCatchGetPrice(coin_a_full_address, date);
     price_b = await tryCatchGetPrice(coin_b_full_address, date);
 
-    if (price_a) {
-      vol = amount_a * price_a;
-    } else if (price_b) {
+    if (price_b) {
       vol = amount_b * price_b;
-      // use exchange rate to try to fill price_a
       if (amount_a != 0) {
-        price_a = (amount_b / amount_a) * price_b;
+        price_a = vol / amount_a;
       }
+    } else if (price_a) {
+      vol = amount_a * price_a;
     } else {
       console.log(
         `price not in sui coinlist, calculate vol failed for pool w/ ${type}`
@@ -560,22 +557,34 @@ export async function calculateTokenValue_USD(
     const amount_a = Number(coin_a) / 10 ** poolInfo.decimal_a;
     const amount_b = Number(coin_b) / 10 ** poolInfo.decimal_b;
 
-    if (price_a) {
-      value_a = amount_a * price_a;
-      //handle the case of low liquidity
-      if (price_b) {
-        value_b = amount_b * price_b;
-      } else {
-        value_b = (amount_b / coin_a2b_price) * price_a;
-      }
-    } else if (price_b) {
+    if (price_b) {
       value_a = amount_a * coin_a2b_price * price_b;
       value_b = amount_b * price_b;
+    } else if (price_a) {
+      value_a = amount_a * price_a;
+      value_b = (amount_b / coin_a2b_price) * price_a;
     } else {
       console.log(
         `price not in sui coinlist, calculate value failed at coin_a: ${coin_a_full_address},coin_b: ${coin_b_full_address}}`
       );
     }
+
+    // if (price_a) {
+    //   value_a = amount_a * price_a;
+    //   //handle the case of low liquidity
+    //   if (price_b) {
+    //     value_b = amount_b * price_b;
+    //   } else {
+    //     value_b = (amount_b / coin_a2b_price) * price_a;
+    //   }
+    // } else if (price_b) {
+    //   value_a = amount_a * coin_a2b_price * price_b;
+    //   value_b = amount_b * price_b;
+    // } else {
+    //   console.log(
+    //     `price not in sui coinlist, calculate value failed at coin_a: ${coin_a_full_address},coin_b: ${coin_b_full_address}}`
+    //   );
+    // }
 
     const turbosPool = await getTurbosPool(pool);
 
