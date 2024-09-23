@@ -102,7 +102,6 @@ deepbook.order_info
         .toString();
 
       ctx.eventLogger.emit("DeepbookSwapEvent", {
-        event_seq: Number(event.id.eventSeq),
         pool: poolId,
         order_id: infoEventData.order_id,
         is_bid: infoEventData.is_bid,
