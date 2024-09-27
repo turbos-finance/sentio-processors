@@ -1001,19 +1001,19 @@
   dependencies:
     bs58 "^5.0.0"
 
-"@mysten/bcs@1.0.4":
-  version "1.0.4"
-  resolved "https://registry.yarnpkg.com/@mysten/bcs/-/bcs-1.0.4.tgz#c8998ee7cb92d9e59e2fae735b69abe49d8037cb"
-  integrity sha512-6JoQi59GN/dVEBCNq8Rj4uOR0niDrJqDx/2gNQWXANwJakHIGH0AMniHrXP41B2dF+mZ3HVmh9Hi3otiEVQTrQ==
+"@mysten/bcs@1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@mysten/bcs/-/bcs-1.1.0.tgz#dee28e8e4d1671f694afad471b644020b227102a"
+  integrity sha512-yy9/1Y4d0FlRywS1+9ze/T7refCbrvwFwJIOKs9M3QBK1njbcHZp+LkVeLqBvIJA5eZ3ZCzmhQ1Xq4Sed5mEBA==
   dependencies:
     bs58 "^6.0.0"
 
-"@mysten/deepbook-v3@*", "@mysten/deepbook-v3@0.6.0":
-  version "0.6.0"
-  resolved "https://registry.yarnpkg.com/@mysten/deepbook-v3/-/deepbook-v3-0.6.0.tgz#6a6e7d51f0fa4736abe089dffcbf5214d1c37753"
-  integrity sha512-Xp5KzFMi5YiSCuhiqjvmT42acH5YufV/d/umEIYx9cWy65UsVPCaVSi6x2dCst13jQIj7ENMxY6YkczD5CKa4Q==
+"@mysten/deepbook-v3@0.8.1":
+  version "0.8.1"
+  resolved "https://registry.yarnpkg.com/@mysten/deepbook-v3/-/deepbook-v3-0.8.1.tgz#996e1439f555d2903db725fbe309ba744aae9df6"
+  integrity sha512-4QezDbpgKwBYxkFWIDeSEUBLbt3vAKLOwdT5RmM3rK27SNVPIyKZB4daLO0jn0JrxxaNuFCYxDyOakOzlCW7/A==
   dependencies:
-    "@mysten/sui" "1.9.0"
+    "@mysten/sui" "1.11.0"
 
 "@mysten/sui.js@~0.54.1":
   version "0.54.1"
@@ -1033,13 +1033,13 @@
     superstruct "^1.0.3"
     tweetnacl "^1.0.3"
 
-"@mysten/sui@1.9.0":
-  version "1.9.0"
-  resolved "https://registry.yarnpkg.com/@mysten/sui/-/sui-1.9.0.tgz#f37a53d637cf9bbd26e3ba7224efbade6233a729"
-  integrity sha512-AcnwVK7ro8+GWAp/vz0V35naS1/PD1FkYlH6rglupKWvVIpnmEBgjr+XE7U4LvtAyoXPiE4uj/MhXLIx5rZuzw==
+"@mysten/sui@1.11.0":
+  version "1.11.0"
+  resolved "https://registry.yarnpkg.com/@mysten/sui/-/sui-1.11.0.tgz#bfd7e1dc960894e536329006b2cab4c3ad67e4da"
+  integrity sha512-+5kSXmoPFrecxUb+fweqqy4eXRpgvv6H51IwRzJbxlolE0AmnM+5IJbLpTlM5RNZEmmocE7p5bUn1OijbuDVkw==
   dependencies:
     "@graphql-typed-document-node/core" "^3.2.0"
-    "@mysten/bcs" "1.0.4"
+    "@mysten/bcs" "1.1.0"
     "@noble/curves" "^1.4.2"
     "@noble/hashes" "^1.4.0"
     "@scure/bip32" "^1.4.0"

@@ -11,6 +11,6 @@
     "upload": "yarn install && sh scripts/upload.sh"
   },
   "dependencies": {
-    "@mysten/deepbook-v3": "*"
+    "@mysten/deepbook-v3": "0.8.1"
   }
 }

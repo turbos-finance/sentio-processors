@@ -1,6 +1,6 @@
 export const skipStartBlockValidation = true;
 
-export const startCheckPoint = 108_605_000n;
+export const startCheckPoint = 113_894_469n;
 
 export * as deepbook from "../types/sui/testnet/deepbook.js";
 

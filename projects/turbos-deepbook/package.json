@@ -11,6 +11,6 @@
     "upload": "yarn install && sentio upload"
   },
   "dependencies": {
-    "@mysten/deepbook-v3": "0.6.0"
+    "@mysten/deepbook-v3": "0.8.1"
   }
 }
