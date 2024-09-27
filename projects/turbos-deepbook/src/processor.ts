@@ -5,8 +5,10 @@ import {
   startCheckPoint,
   originPools,
   originCoins,
+  chainId,
 } from "./helper/config.js";
 import { GLOBAL_CONFIG } from "@sentio/runtime";
+import { getPriceByType } from "@sentio/sdk/utils";
 
 GLOBAL_CONFIG.execution = {
   skipStartBlockValidation: skipStartBlockValidation,
@@ -82,6 +84,11 @@ deepbook.order_info
         return;
       }
 
+      const [baseCoinPrice = 1, quoteCoinPrice = 1] = await Promise.all([
+        getPriceByType(chainId, baseCoinInfo.type, ctx.timestamp),
+        getPriceByType(chainId, quoteCoinInfo.type, ctx.timestamp),
+      ]);
+
       // onchain_price = real_price * FLOAT_SCALAR * quote_coin_scalar / base_coin_scalar
       const price = new BigDecimal(eventData.price)
         .div(
@@ -91,12 +98,12 @@ deepbook.order_info
             .div(baseCoinInfo.scalar)
         )
         .toString();
-      const amountA = new BigDecimal(eventData.base_quantity)
-        .div(baseCoinInfo.scalar)
-        .toString();
-      const amountB = new BigDecimal(eventData.quote_quantity)
-        .div(quoteCoinInfo.scalar)
-        .toString();
+      const amountA = new BigDecimal(eventData.base_quantity).div(
+        baseCoinInfo.scalar
+      );
+      const amountB = new BigDecimal(eventData.quote_quantity).div(
+        quoteCoinInfo.scalar
+      );
       const amountOrigin = new BigDecimal(infoEventData.original_quantity)
         .div(baseCoinInfo.scalar)
         .toString();
@@ -116,13 +123,15 @@ deepbook.order_info
         taker_order_id: eventData.taker_order_id,
         coin_symbol_a: baseCoinInfo.symbol,
         coin_symbol_b: quoteCoinInfo.symbol,
+        coin_volume_a: amountA.times(baseCoinPrice).toString(),
+        coin_volume_b: amountB.times(quoteCoinPrice).toString(),
         coin_type_a: baseCoinInfo.type,
         coin_type_b: quoteCoinInfo.type,
-        coin_amount_a: amountA,
-        coin_amount_b: amountB,
+        coin_amount_a: amountA.toString(),
+        coin_amount_b: amountB.toString(),
         total_amount: amountOrigin,
         distinctId: event.sender,
-        message: `Deepbook swap from ${atob ? baseCoinInfo.symbol : quoteCoinInfo.symbol} to ${atob ? quoteCoinInfo.symbol : baseCoinInfo.symbol}. Progress: ${amountA}/${amountOrigin}`,
+        message: `Deepbook swap from ${atob ? baseCoinInfo.symbol : quoteCoinInfo.symbol} to ${atob ? quoteCoinInfo.symbol : baseCoinInfo.symbol}. Progress: ${amountA.toString()}/${amountOrigin}`,
       });
 
       ctx.meter.Gauge("Deepbook Prices").record(price, {
